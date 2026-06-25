@@ -144,6 +144,7 @@ return [
     'notion' => [
         'client_id' => env('NOTION_CLIENT_ID'),
         'client_secret' => env('NOTION_CLIENT_SECRET'),
+        'verification_secret' => env('NOTION_VERIFICATION_SECRET'),
         'redirect' => $oauthBase.'/notion/callback',
     ],
 

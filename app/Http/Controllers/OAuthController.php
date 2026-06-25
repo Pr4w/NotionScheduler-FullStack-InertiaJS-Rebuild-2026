@@ -2016,7 +2016,7 @@ class OAuthController extends Controller
     {
 
         // 1. Your verification token
-        $verification_token = 'secret_q9ltsC7NKDgmyRxtw3GJ0hJXUCrkecHeo4FabVrg8ZG';
+        $verification_token = Config::get('services.notion.verification_secret');
 
         // 2. Get the signature from the request header
         $notionSignature = $request->header('X-Notion-Signature');
