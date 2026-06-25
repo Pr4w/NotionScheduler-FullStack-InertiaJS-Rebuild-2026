@@ -170,6 +170,22 @@ const socialSort = (a: SocialAccount, b: SocialAccount): number =>
 const sortAccounts = (list: SocialAccount[]): SocialAccount[] =>
     [...list].sort(socialSort);
 
+// Group accounts by platform (each group sorted by name) so the Databases tab
+// can show one column per social network.
+function groupAccounts(
+    list: SocialAccount[],
+): { platform: string; accounts: SocialAccount[] }[] {
+    const groups = new Map<string, SocialAccount[]>();
+    for (const s of sortAccounts(list)) {
+        if (!groups.has(s.platform)) groups.set(s.platform, []);
+        groups.get(s.platform)!.push(s);
+    }
+    return [...groups.entries()].map(([platform, accounts]) => ({
+        platform,
+        accounts,
+    }));
+}
+
 // Compact per-platform counts (used in the Databases tab + the social filter).
 function platformSummary(
     list: SocialAccount[],
@@ -498,21 +514,30 @@ onMounted(() => {
                         </p>
                         <div
                             v-else
-                            class="grid grid-cols-2 gap-x-4 gap-y-1.5 @md:grid-cols-3 @xl:grid-cols-4 @3xl:grid-cols-5"
+                            class="grid grid-cols-2 gap-x-4 gap-y-3 @md:grid-cols-3 @xl:grid-cols-4"
                         >
-                            <span
-                                v-for="s in sortAccounts(db.socials)"
-                                :key="s.id"
-                                class="inline-flex items-center gap-1.5 text-xs"
+                            <div
+                                v-for="group in groupAccounts(db.socials)"
+                                :key="group.platform"
                             >
-                                <SocialIcon
-                                    :platform="s.platform"
-                                    class="h-3.5 w-3.5 shrink-0"
-                                />
-                                <span class="truncate">{{
-                                    s.name ?? cap(s.platform)
-                                }}</span>
-                            </span>
+                                <div
+                                    class="mb-1 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground"
+                                >
+                                    <SocialIcon
+                                        :platform="group.platform"
+                                        class="h-3.5 w-3.5 shrink-0"
+                                    />
+                                    {{ cap(group.platform) }}
+                                </div>
+                                <div
+                                    v-for="s in group.accounts"
+                                    :key="s.id"
+                                    class="truncate text-xs"
+                                    :title="s.name ?? cap(s.platform)"
+                                >
+                                    {{ s.name ?? cap(s.platform) }}
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
