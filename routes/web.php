@@ -2,9 +2,11 @@
 
 use Illuminate\Support\Facades\Route;
 
+// TODO Phase 5: '/' is replaced by the Blade marketing landing (home2026).
 Route::inertia('/', 'Welcome')->name('home');
 
-Route::middleware(['auth', 'verified'])->group(function () {
+// The authenticated app lives under /app/* (auth routes are prefixed by Fortify).
+Route::middleware(['auth', 'verified'])->prefix('app')->group(function () {
     Route::inertia('dashboard', 'Dashboard')->name('dashboard');
 });
 
