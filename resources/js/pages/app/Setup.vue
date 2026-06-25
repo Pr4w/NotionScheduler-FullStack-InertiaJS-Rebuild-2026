@@ -1,19 +1,58 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { Head, router, useHttp } from '@inertiajs/vue3';
 import { toast } from 'vue-sonner';
+import { Database } from '@lucide/vue';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
 import AddDatabaseDialog from '@/components/AddDatabaseDialog.vue';
 import AddSocialAccountDialog from '@/components/AddSocialAccountDialog.vue';
+import SocialIcon from '@/components/SocialIcon.vue';
 import { useOAuthConnect } from '@/composables/useOAuthConnect';
+
+interface SocialAccount {
+    id: number;
+    platform: string;
+    name: string | null;
+    profile_picture: string | null;
+}
+
+interface NotionDatabase {
+    id: number;
+    database_name: string | null;
+    database_id: string;
+}
 
 const props = defineProps<{
     hasNotionToken: boolean;
     databasesCount: number;
     socialsCount: number;
+    socials: SocialAccount[];
+    databases: NotionDatabase[];
     completedWizard: boolean;
 }>();
+
+const cap = (s: string): string =>
+    s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+
+// Group connected accounts by platform so the wizard can show what's linked,
+// stacked per network, instead of just a count.
+const groupedSocials = computed(() => {
+    const sorted = [...props.socials].sort(
+        (a, b) =>
+            a.platform.localeCompare(b.platform) ||
+            (a.name ?? '').localeCompare(b.name ?? ''),
+    );
+    const groups = new Map<string, SocialAccount[]>();
+    for (const s of sorted) {
+        if (!groups.has(s.platform)) groups.set(s.platform, []);
+        groups.get(s.platform)!.push(s);
+    }
+    return [...groups.entries()].map(([platform, accounts]) => ({
+        platform,
+        accounts,
+    }));
+});
 
 defineOptions({
     layout: {
@@ -163,6 +202,22 @@ onMounted(() => {
                     <strong>{{ dbCount }}</strong> connected.
                 </p>
                 <AddDatabaseDialog @connected="onDatabaseConnected" />
+
+                <div
+                    v-if="databases.length"
+                    class="space-y-1.5 rounded-lg border border-border p-3 text-sm"
+                >
+                    <div
+                        v-for="db in databases"
+                        :key="db.id"
+                        class="flex items-center gap-2"
+                    >
+                        <Database class="h-4 w-4 shrink-0 text-primary" />
+                        <span class="truncate">{{
+                            db.database_name ?? 'Untitled database'
+                        }}</span>
+                    </div>
+                </div>
             </div>
 
             <!-- Step 3: Connect social accounts -->
@@ -175,6 +230,59 @@ onMounted(() => {
                     <strong>{{ socialCount }}</strong> connected.
                 </p>
                 <AddSocialAccountDialog return-to="setup" />
+
+                <div
+                    v-if="socials.length"
+                    class="space-y-3 rounded-lg border border-border p-3"
+                >
+                    <div
+                        v-for="group in groupedSocials"
+                        :key="group.platform"
+                        class="space-y-1.5"
+                    >
+                        <div
+                            class="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                        >
+                            <SocialIcon
+                                :platform="group.platform"
+                                class="h-3.5 w-3.5"
+                            />
+                            {{ cap(group.platform) }}
+                            <span class="font-normal"
+                                >({{ group.accounts.length }})</span
+                            >
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <span
+                                v-for="s in group.accounts"
+                                :key="s.id"
+                                class="inline-flex items-center gap-2 rounded-full border border-border bg-muted/40 py-1 pr-3 pl-1 text-xs"
+                            >
+                                <span class="relative shrink-0">
+                                    <img
+                                        v-if="s.profile_picture"
+                                        :src="s.profile_picture"
+                                        alt=""
+                                        class="h-6 w-6 rounded-full object-cover"
+                                    />
+                                    <span
+                                        v-else
+                                        class="flex h-6 w-6 items-center justify-center rounded-full bg-muted"
+                                    >
+                                        <SocialIcon
+                                            :platform="s.platform"
+                                            class="h-3 w-3"
+                                        />
+                                    </span>
+                                </span>
+                                <span
+                                    class="max-w-[10rem] truncate font-medium"
+                                    >{{ s.name ?? cap(s.platform) }}</span
+                                >
+                            </span>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Step 4: Done -->

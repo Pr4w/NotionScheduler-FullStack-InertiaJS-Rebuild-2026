@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\NotionAccessTokens;
+use App\Models\NotionDatabases;
 use App\Models\NotionSocialAccounts;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -20,15 +21,23 @@ class SetupController extends Controller
     {
         $userId = $request->user()->id;
 
+        $socials = NotionSocialAccounts::where('userid', $userId)
+            ->where('is_active', 1)
+            ->get();
+
+        $databases = NotionDatabases::where('userid', $userId)
+            ->where('is_active', 1)
+            ->get(['id', 'database_name', 'database_id']);
+
         return Inertia::render('app/Setup', [
             'hasNotionToken' => NotionAccessTokens::where('userid', $userId)
                 ->where('is_active', 1)
                 ->where('is_valid', 1)
                 ->exists(),
-            'databasesCount' => $request->user()->getActiveDatabaseCount(),
-            'socialsCount' => NotionSocialAccounts::where('userid', $userId)
-                ->where('is_active', 1)
-                ->count(),
+            'databasesCount' => $databases->count(),
+            'socialsCount' => $socials->count(),
+            'socials' => $socials,
+            'databases' => $databases,
             'completedWizard' => (bool) $request->user()->completed_wizard,
         ]);
     }
