@@ -8,6 +8,7 @@ use App\Filament\Resources\BlogPosts\Pages\ListBlogPosts;
 use App\Filament\Resources\BlogPosts\Schemas\BlogPostForm;
 use App\Filament\Resources\BlogPosts\Tables\BlogPostsTable;
 use App\Models\BlogPost;
+use UnitEnum;
 use BackedEnum;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -19,6 +20,7 @@ class BlogPostResource extends Resource
     protected static ?string $model = BlogPost::class;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::DocumentText;
+    protected static UnitEnum|string|null $navigationGroup = 'Marketing';
 
     protected static ?string $recordTitleAttribute = 'title';
 
