@@ -10,6 +10,8 @@ use Illuminate\Support\Collection;
 
 class MyCalendarWidget extends CalendarWidget
 {
+    protected static bool $isDiscovered = false;
+
     protected function getEvents(FetchInfo $info): Collection|array|Builder
     {
 
