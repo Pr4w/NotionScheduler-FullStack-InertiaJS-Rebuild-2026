@@ -409,118 +409,113 @@ onMounted(() => {
             <div class="flex justify-end">
                 <AddDatabaseDialog @connected="onDatabaseConnected" />
             </div>
-            <div class="overflow-x-auto rounded-xl border border-border">
-                <table class="w-full text-sm">
-                    <thead class="bg-muted/50 text-left text-muted-foreground">
-                        <tr>
-                            <th class="px-4 py-2 font-medium">Database</th>
-                            <th class="px-4 py-2 font-medium">Status</th>
-                            <th class="px-4 py-2 font-medium">
-                                Linked accounts
-                            </th>
-                            <th class="px-4 py-2 text-right font-medium">
-                                Actions
-                            </th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-if="!databases.length">
-                            <td
-                                colspan="4"
-                                class="px-4 py-8 text-center text-muted-foreground"
+            <div
+                v-if="!databases.length"
+                class="rounded-xl border border-border p-8 text-center text-muted-foreground"
+            >
+                No Notion databases connected yet.
+            </div>
+
+            <div v-else class="grid gap-3 xl:grid-cols-2">
+                <div
+                    v-for="db in databases"
+                    :key="db.id"
+                    class="@container rounded-xl border border-border p-4"
+                >
+                    <!-- Header: name + status + actions -->
+                    <div
+                        class="flex flex-wrap items-start justify-between gap-3"
+                    >
+                        <div class="space-y-1.5">
+                            <div class="flex flex-wrap items-center gap-2">
+                                <span class="font-medium">{{
+                                    db.database_name ?? 'Untitled database'
+                                }}</span>
+                                <a
+                                    :href="notionUrl(db.database_id)"
+                                    target="_blank"
+                                    rel="noopener"
+                                    class="text-xs font-medium text-primary hover:underline"
+                                >
+                                    Open in Notion ↗
+                                </a>
+                            </div>
+                            <span
+                                :class="[
+                                    pill,
+                                    truthy(db.is_valid)
+                                        ? 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300'
+                                        : 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300',
+                                ]"
                             >
-                                No Notion databases connected yet.
-                            </td>
-                        </tr>
-                        <tr
-                            v-for="db in databases"
-                            :key="db.id"
-                            class="border-t border-border"
+                                {{
+                                    truthy(db.is_valid)
+                                        ? 'Connected'
+                                        : 'Needs reconnect'
+                                }}
+                            </span>
+                        </div>
+                        <div class="flex shrink-0 gap-2">
+                            <ManageDatabaseSocialsDialog
+                                :database-id="db.id"
+                                :socials="socials"
+                                @updated="onSocialsUpdated"
+                            />
+                            <Button
+                                v-if="!truthy(db.is_valid)"
+                                size="sm"
+                                variant="outline"
+                                :disabled="reconnectAction.processing"
+                                @click="reconnectDatabase(db.id)"
+                            >
+                                <RefreshCw class="h-4 w-4" />
+                                Reconnect
+                            </Button>
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                :disabled="dbAction.processing"
+                                @click="removeDatabase(db.id)"
+                            >
+                                <Trash2 class="h-4 w-4" />
+                                Remove
+                            </Button>
+                        </div>
+                    </div>
+
+                    <!-- Linked accounts (compact multi-column grid) -->
+                    <div class="mt-4 border-t border-border pt-3">
+                        <div
+                            class="mb-2 text-xs font-medium text-muted-foreground"
                         >
-                            <td class="px-4 py-3">
-                                <div class="flex items-center gap-2">
-                                    <span class="font-medium">{{
-                                        db.database_name ?? 'Untitled database'
-                                    }}</span>
-                                    <a
-                                        :href="notionUrl(db.database_id)"
-                                        target="_blank"
-                                        rel="noopener"
-                                        class="text-xs font-medium text-primary hover:underline"
-                                    >
-                                        Open in Notion ↗
-                                    </a>
-                                </div>
-                            </td>
-                            <td class="px-4 py-3">
-                                <span
-                                    :class="[
-                                        pill,
-                                        truthy(db.is_valid)
-                                            ? 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300'
-                                            : 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300',
-                                    ]"
-                                >
-                                    {{
-                                        truthy(db.is_valid)
-                                            ? 'Connected'
-                                            : 'Needs reconnect'
-                                    }}
-                                </span>
-                            </td>
-                            <td class="px-4 py-3">
-                                <span
-                                    v-if="!db.socials?.length"
-                                    class="text-muted-foreground"
-                                    >None</span
-                                >
-                                <div v-else class="flex flex-col gap-1">
-                                    <span
-                                        v-for="s in sortAccounts(db.socials)"
-                                        :key="s.id"
-                                        class="inline-flex items-center gap-1.5 text-xs"
-                                    >
-                                        <SocialIcon
-                                            :platform="s.platform"
-                                            class="h-3.5 w-3.5 shrink-0"
-                                        />
-                                        <span class="truncate">{{
-                                            s.name ?? cap(s.platform)
-                                        }}</span>
-                                    </span>
-                                </div>
-                            </td>
-                            <td class="px-4 py-3">
-                                <div class="flex justify-end gap-2">
-                                    <ManageDatabaseSocialsDialog
-                                        :database-id="db.id"
-                                        :socials="socials"
-                                        @updated="onSocialsUpdated"
-                                    />
-                                    <Button
-                                        v-if="!truthy(db.is_valid)"
-                                        size="sm"
-                                        variant="outline"
-                                        :disabled="reconnectAction.processing"
-                                        @click="reconnectDatabase(db.id)"
-                                    >
-                                        <RefreshCw class="h-4 w-4" />
-                                        Reconnect
-                                    </Button>
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        :disabled="dbAction.processing"
-                                        @click="removeDatabase(db.id)"
-                                    >
-                                        <Trash2 class="h-4 w-4" />
-                                        Remove
-                                    </Button>
-                                </div>
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
+                            Linked accounts ({{ db.socials?.length ?? 0 }})
+                        </div>
+                        <p
+                            v-if="!db.socials?.length"
+                            class="text-sm text-muted-foreground"
+                        >
+                            No accounts linked yet.
+                        </p>
+                        <div
+                            v-else
+                            class="grid grid-cols-2 gap-x-4 gap-y-1.5 @md:grid-cols-3 @xl:grid-cols-4 @3xl:grid-cols-5"
+                        >
+                            <span
+                                v-for="s in sortAccounts(db.socials)"
+                                :key="s.id"
+                                class="inline-flex items-center gap-1.5 text-xs"
+                            >
+                                <SocialIcon
+                                    :platform="s.platform"
+                                    class="h-3.5 w-3.5 shrink-0"
+                                />
+                                <span class="truncate">{{
+                                    s.name ?? cap(s.platform)
+                                }}</span>
+                            </span>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
