@@ -47,6 +47,7 @@ class User extends Authenticatable implements FilamentUser, HasName, MustVerifyE
         // 'is_subscribed',
         'subscription_details',
         'name',
+        'is_admin',
     ];
 
     protected $with = [
@@ -132,6 +133,15 @@ class User extends Authenticatable implements FilamentUser, HasName, MustVerifyE
         }
 
         return false;
+    }
+
+    /**
+     * Serialized `is_admin` flag so the Inertia frontend can show admin-only
+     * UI (e.g. the /admin link in the sidebar).
+     */
+    public function getIsAdminAttribute(): bool
+    {
+        return $this->isAdmin();
     }
 
     public function isSubscribed()

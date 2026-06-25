@@ -163,6 +163,39 @@ function socialStats(s: SocialAccount): string {
     return parts.join(' · ');
 }
 
+// Stable ordering for accounts: by platform, then by name.
+const socialSort = (a: SocialAccount, b: SocialAccount): number =>
+    a.platform.localeCompare(b.platform) ||
+    (a.name ?? '').localeCompare(b.name ?? '');
+const sortAccounts = (list: SocialAccount[]): SocialAccount[] =>
+    [...list].sort(socialSort);
+
+// Compact per-platform counts (used in the Databases tab + the social filter).
+function platformSummary(
+    list: SocialAccount[],
+): { platform: string; count: number }[] {
+    const map = new Map<string, number>();
+    for (const s of list) map.set(s.platform, (map.get(s.platform) ?? 0) + 1);
+    return [...map.entries()]
+        .map(([platform, count]) => ({ platform, count }))
+        .sort((a, b) => a.platform.localeCompare(b.platform));
+}
+
+// Social Accounts tab: platform filter + ordering.
+const socialFilter = ref<string>('all');
+const socialPlatforms = computed(() => platformSummary(props.socials));
+const filteredSocials = computed(() => {
+    const sorted = [...props.socials].sort(socialSort);
+    return socialFilter.value === 'all'
+        ? sorted
+        : sorted.filter((s) => s.platform === socialFilter.value);
+});
+const filterChipClass = (p: string): string =>
+    'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ' +
+    (socialFilter.value === p
+        ? 'bg-primary text-primary-foreground'
+        : 'bg-muted text-muted-foreground hover:text-foreground');
+
 function postStatusClass(post: Post): string {
     if (truthy(post.in_flight))
         return 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300';
@@ -441,20 +474,19 @@ onMounted(() => {
                                     class="text-muted-foreground"
                                     >None</span
                                 >
-                                <div
-                                    v-else
-                                    class="flex flex-wrap items-center gap-1.5"
-                                >
+                                <div v-else class="flex flex-col gap-1">
                                     <span
-                                        v-for="s in db.socials"
+                                        v-for="s in sortAccounts(db.socials)"
                                         :key="s.id"
-                                        class="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs"
+                                        class="inline-flex items-center gap-1.5 text-xs"
                                     >
                                         <SocialIcon
                                             :platform="s.platform"
-                                            class="h-3.5 w-3.5"
+                                            class="h-3.5 w-3.5 shrink-0"
                                         />
-                                        {{ s.name ?? cap(s.platform) }}
+                                        <span class="truncate">{{
+                                            s.name ?? cap(s.platform)
+                                        }}</span>
                                     </span>
                                 </div>
                             </td>
@@ -494,7 +526,33 @@ onMounted(() => {
 
         <!-- Social accounts (card grid) -->
         <div v-else-if="tab === 'socials'" class="flex flex-col gap-3">
-            <div class="flex justify-end">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+                <div
+                    v-if="socials.length"
+                    class="flex flex-wrap items-center gap-1.5"
+                >
+                    <button
+                        type="button"
+                        :class="filterChipClass('all')"
+                        @click="socialFilter = 'all'"
+                    >
+                        All ({{ socials.length }})
+                    </button>
+                    <button
+                        v-for="p in socialPlatforms"
+                        :key="p.platform"
+                        type="button"
+                        :class="filterChipClass(p.platform)"
+                        @click="socialFilter = p.platform"
+                    >
+                        <SocialIcon
+                            :platform="p.platform"
+                            class="h-3.5 w-3.5"
+                        />
+                        {{ cap(p.platform) }} ({{ p.count }})
+                    </button>
+                </div>
+                <span v-else></span>
                 <AddSocialAccountDialog />
             </div>
             <div
@@ -505,7 +563,7 @@ onMounted(() => {
             </div>
             <div v-else class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 <div
-                    v-for="s in socials"
+                    v-for="s in filteredSocials"
                     :key="s.id"
                     class="flex items-center gap-3 rounded-xl border border-border p-3"
                 >

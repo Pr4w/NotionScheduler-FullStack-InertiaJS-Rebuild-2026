@@ -11,4 +11,7 @@ export type NavItem = {
     href: NonNullable<InertiaLinkProps['href']>;
     icon?: LucideIcon;
     isActive?: boolean;
+    // Render as a plain full-page anchor instead of an Inertia <Link>
+    // (e.g. /admin, which is a separate Filament app, not an Inertia page).
+    external?: boolean;
 };

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { useHttp } from '@inertiajs/vue3';
 import { toast } from 'vue-sonner';
 import { Button } from '@/components/ui/button';
@@ -36,6 +36,15 @@ const selected = ref<number[]>([]);
 
 const cap = (s: string): string =>
     s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+
+// Order accounts by platform, then name (the prop order is unsorted).
+const sortedSocials = computed(() =>
+    [...props.socials].sort(
+        (a, b) =>
+            a.platform.localeCompare(b.platform) ||
+            (a.name ?? '').localeCompare(b.name ?? ''),
+    ),
+);
 
 watch(open, (isOpen) => {
     if (isOpen) {
@@ -90,12 +99,12 @@ function doSave() {
                 >
             </DialogHeader>
 
-            <div class="max-h-[300px] space-y-1 overflow-y-auto py-2">
+            <div class="max-h-[60vh] space-y-1 overflow-y-auto py-2">
                 <p v-if="!socials.length" class="text-sm text-muted-foreground">
                     You have no connected social accounts yet.
                 </p>
                 <label
-                    v-for="s in socials"
+                    v-for="s in sortedSocials"
                     :key="s.id"
                     class="flex cursor-pointer items-center gap-3 rounded-md p-2 hover:bg-muted/50"
                 >
