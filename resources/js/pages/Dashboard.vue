@@ -1,9 +1,17 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { Head, router, useHttp, usePage } from '@inertiajs/vue3';
+import { Head, Link, router, useHttp, usePage } from '@inertiajs/vue3';
 import { toast } from 'vue-sonner';
 import { Button } from '@/components/ui/button';
-import { ChevronDown, RefreshCw, Trash2 } from '@lucide/vue';
+import {
+    AtSign,
+    CalendarClock,
+    ChevronDown,
+    Database,
+    RefreshCw,
+    Send,
+    Trash2,
+} from '@lucide/vue';
 import AddDatabaseDialog from '@/components/AddDatabaseDialog.vue';
 import ManageDatabaseSocialsDialog from '@/components/ManageDatabaseSocialsDialog.vue';
 import AddSocialAccountDialog from '@/components/AddSocialAccountDialog.vue';
@@ -114,22 +122,31 @@ const tabs = computed(() => [
     {
         key: 'databases' as const,
         label: 'Databases',
-        count: props.databases.length,
+        icon: Database,
+        badge: plan.value
+            ? `${props.databases.length}/${plan.value.options.databases}`
+            : String(props.databases.length),
     },
     {
         key: 'socials' as const,
         label: 'Social Accounts',
-        count: props.socials.length,
+        icon: AtSign,
+        badge: plan.value
+            ? `${props.socials.length}/${plan.value.options.social_accounts}`
+            : String(props.socials.length),
     },
     {
         key: 'posts' as const,
         label: 'Scheduled Posts',
-        count: props.posts.length,
+        icon: CalendarClock,
+        badge: String(props.posts.length),
     },
     {
         key: 'submitted' as const,
         label: 'Submitted Posts',
-        count: submittedTotal.value,
+        icon: Send,
+        badge:
+            submittedTotal.value !== null ? String(submittedTotal.value) : null,
     },
 ]);
 
@@ -366,44 +383,21 @@ onMounted(() => {
                 >
                     {{ plan.details.name }} plan
                 </span>
-                <span
-                    class="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-muted-foreground"
+                <Link
+                    href="/app/pricing"
+                    class="font-medium text-primary hover:underline"
+                    >Upgrade ↗</Link
                 >
-                    Databases
-                    <strong class="text-foreground"
-                        >{{ databases.length }} /
-                        {{ plan.options.databases }}</strong
-                    >
-                </span>
-                <span
-                    class="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-muted-foreground"
-                >
-                    Accounts
-                    <strong class="text-foreground"
-                        >{{ socials.length }} /
-                        {{ plan.options.social_accounts }}</strong
-                    >
-                </span>
-                <span
-                    class="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-muted-foreground"
-                >
-                    Posts
-                    <strong class="text-foreground">{{
-                        plan.options.post_limit
-                            ? `${plan.options.post_limit_count}/mo`
-                            : 'Unlimited'
-                    }}</strong>
-                </span>
             </div>
         </div>
 
         <!-- Tabs -->
-        <div class="flex gap-1 border-b border-border">
+        <div class="flex gap-1 overflow-x-auto border-b border-border">
             <button
                 v-for="t in tabs"
                 :key="t.key"
                 type="button"
-                class="-mb-px border-b-2 px-4 py-2 text-sm font-medium transition-colors"
+                class="-mb-px inline-flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors"
                 :class="
                     tab === t.key
                         ? 'border-primary text-foreground'
@@ -411,11 +405,12 @@ onMounted(() => {
                 "
                 @click="tab = t.key"
             >
+                <component :is="t.icon" class="h-4 w-4 shrink-0" />
                 {{ t.label }}
                 <span
-                    v-if="t.count !== null"
-                    class="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-xs"
-                    >{{ t.count }}</span
+                    v-if="t.badge"
+                    class="ml-0.5 rounded-full bg-muted px-1.5 py-0.5 text-xs"
+                    >{{ t.badge }}</span
                 >
             </button>
         </div>
