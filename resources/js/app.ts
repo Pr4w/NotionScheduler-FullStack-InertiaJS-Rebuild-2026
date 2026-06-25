@@ -4,6 +4,7 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import AuthLayout from '@/layouts/AuthLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { initializeFlashToast } from '@/lib/flashToast';
+import { initializeHttpErrorToast } from '@/lib/httpErrorToast';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
@@ -31,3 +32,7 @@ initializeTheme();
 
 // This will listen for flash toast data from the server...
 initializeFlashToast();
+
+// Global safety net: toast on unexpected useHttp failures (5xx / network /
+// expired session) so a failed action never silently re-enables its button.
+initializeHttpErrorToast();
