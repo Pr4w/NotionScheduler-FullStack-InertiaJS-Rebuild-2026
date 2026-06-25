@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { Head, router, useHttp, usePage } from '@inertiajs/vue3';
 import { toast } from 'vue-sonner';
 import { Button } from '@/components/ui/button';
+import { ChevronDown, RefreshCw, Trash2 } from '@lucide/vue';
 import AddDatabaseDialog from '@/components/AddDatabaseDialog.vue';
 import ManageDatabaseSocialsDialog from '@/components/ManageDatabaseSocialsDialog.vue';
 import AddSocialAccountDialog from '@/components/AddSocialAccountDialog.vue';
@@ -41,6 +42,7 @@ interface Post {
     account_id: number | null;
     in_flight: number | boolean;
     permalink: string | null;
+    post_page_id: string | null;
 }
 
 interface Account {
@@ -62,13 +64,36 @@ defineOptions({
     },
 });
 
+interface SubscriptionDetails {
+    is_subscribed: boolean;
+    tier: string;
+    options: {
+        social_accounts: number;
+        databases: number;
+        post_limit: boolean;
+        post_limit_count?: number;
+    };
+    details: { name: string; description: string };
+}
+
 const page = usePage();
-const userName = computed<string>(() => {
-    const user = (
-        page.props.auth as { user?: { name?: string | null } } | undefined
-    )?.user;
-    return user?.name ?? 'there';
-});
+const authUser = computed(
+    () =>
+        (
+            page.props.auth as
+                | {
+                      user?: {
+                          name?: string | null;
+                          subscription_details?: SubscriptionDetails;
+                      };
+                  }
+                | undefined
+        )?.user,
+);
+const userName = computed<string>(() => authUser.value?.name ?? 'there');
+const plan = computed<SubscriptionDetails | null>(
+    () => authUser.value?.subscription_details ?? null,
+);
 
 type TabKey = 'databases' | 'socials' | 'posts' | 'submitted';
 const tab = ref<TabKey>('databases');
@@ -125,6 +150,17 @@ function fmtNum(n: number | null): string {
         return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M';
     if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'k';
     return String(n);
+}
+
+// Only surface followers/posts when we actually have the data, so cards never
+// read "— followers · 0 posts".
+function socialStats(s: SocialAccount): string {
+    const parts: string[] = [];
+    if (typeof s.followers === 'number' && s.followers > 0)
+        parts.push(`${fmtNum(s.followers)} followers`);
+    if (typeof s.post_count === 'number' && s.post_count > 0)
+        parts.push(`${s.post_count} posts`);
+    return parts.join(' · ');
 }
 
 function postStatusClass(post: Post): string {
@@ -271,6 +307,45 @@ onMounted(() => {
                 Here's an overview of your Notion databases, connected accounts
                 and scheduled posts.
             </p>
+
+            <div
+                v-if="plan"
+                class="mt-2 flex flex-wrap items-center gap-2 text-xs"
+            >
+                <span
+                    class="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-1 font-medium text-primary"
+                >
+                    {{ plan.details.name }} plan
+                </span>
+                <span
+                    class="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-muted-foreground"
+                >
+                    Databases
+                    <strong class="text-foreground"
+                        >{{ databases.length }} /
+                        {{ plan.options.databases }}</strong
+                    >
+                </span>
+                <span
+                    class="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-muted-foreground"
+                >
+                    Accounts
+                    <strong class="text-foreground"
+                        >{{ socials.length }} /
+                        {{ plan.options.social_accounts }}</strong
+                    >
+                </span>
+                <span
+                    class="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-muted-foreground"
+                >
+                    Posts
+                    <strong class="text-foreground">{{
+                        plan.options.post_limit
+                            ? `${plan.options.post_limit_count}/mo`
+                            : 'Unlimited'
+                    }}</strong>
+                </span>
+            </div>
         </div>
 
         <!-- Tabs -->
@@ -397,6 +472,7 @@ onMounted(() => {
                                         :disabled="reconnectAction.processing"
                                         @click="reconnectDatabase(db.id)"
                                     >
+                                        <RefreshCw class="h-4 w-4" />
                                         Reconnect
                                     </Button>
                                     <Button
@@ -404,8 +480,10 @@ onMounted(() => {
                                         variant="outline"
                                         :disabled="dbAction.processing"
                                         @click="removeDatabase(db.id)"
-                                        >Remove</Button
                                     >
+                                        <Trash2 class="h-4 w-4" />
+                                        Remove
+                                    </Button>
                                 </div>
                             </td>
                         </tr>
@@ -473,17 +551,17 @@ onMounted(() => {
                         <div
                             class="mt-0.5 truncate text-xs text-muted-foreground"
                         >
-                            {{ fmtNum(s.followers) }} followers ·
-                            {{ s.post_count ?? 0 }} posts
+                            {{ socialStats(s) || cap(s.platform) }}
                         </div>
                     </div>
                     <Button
                         size="sm"
-                        variant="ghost"
-                        class="shrink-0 text-muted-foreground hover:text-destructive"
+                        variant="outline"
+                        class="shrink-0"
                         :disabled="socialAction.processing"
                         @click="removeSocial(s.id)"
                     >
+                        <Trash2 class="h-4 w-4" />
                         Remove
                     </Button>
                 </div>
@@ -539,6 +617,14 @@ onMounted(() => {
                                 <span v-else>{{
                                     p.post_name ?? 'Untitled post'
                                 }}</span>
+                                <a
+                                    v-if="p.post_page_id"
+                                    :href="notionUrl(p.post_page_id)"
+                                    target="_blank"
+                                    rel="noopener"
+                                    class="text-xs font-medium text-primary hover:underline"
+                                    >Notion ↗</a
+                                >
                             </div>
                         </td>
                         <td class="px-4 py-3">
@@ -561,8 +647,10 @@ onMounted(() => {
                                     variant="outline"
                                     :disabled="postAction.processing"
                                     @click="deletePost(p.id)"
-                                    >Remove</Button
                                 >
+                                    <Trash2 class="h-4 w-4" />
+                                    Remove
+                                </Button>
                             </div>
                         </td>
                     </tr>
@@ -627,6 +715,14 @@ onMounted(() => {
                                     <span v-else>{{
                                         p.post_name ?? 'Untitled post'
                                     }}</span>
+                                    <a
+                                        v-if="p.post_page_id"
+                                        :href="notionUrl(p.post_page_id)"
+                                        target="_blank"
+                                        rel="noopener"
+                                        class="text-xs font-medium text-primary hover:underline"
+                                        >Notion ↗</a
+                                    >
                                 </div>
                             </td>
                             <td class="px-4 py-3">
@@ -663,6 +759,7 @@ onMounted(() => {
                     :disabled="submittedHttp.processing"
                     @click="loadSubmitted(false)"
                 >
+                    <ChevronDown class="h-4 w-4" />
                     Load more
                 </Button>
             </div>

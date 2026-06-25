@@ -10,6 +10,7 @@ import {
     DialogTrigger,
 } from '@/components/ui/dialog';
 import { Spinner } from '@/components/ui/spinner';
+import { Plus } from '@lucide/vue';
 import SocialIcon from '@/components/SocialIcon.vue';
 import { useOAuthConnect } from '@/composables/useOAuthConnect';
 
@@ -37,7 +38,7 @@ const platforms: { slug: string; icon: string; label: string }[] = [
 <template>
     <Dialog v-model:open="open">
         <DialogTrigger as-child>
-            <Button size="sm">Add account</Button>
+            <Button size="sm"><Plus class="h-4 w-4" /> Add account</Button>
         </DialogTrigger>
         <DialogContent>
             <DialogHeader>

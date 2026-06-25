@@ -13,6 +13,7 @@ import {
     DialogTrigger,
 } from '@/components/ui/dialog';
 import { Spinner } from '@/components/ui/spinner';
+import { Plus } from '@lucide/vue';
 import { toastFromEnvelope } from '@/lib/notionToast';
 import { useOAuthConnect } from '@/composables/useOAuthConnect';
 
@@ -83,7 +84,7 @@ function doConnect() {
 <template>
     <Dialog v-model:open="open">
         <DialogTrigger as-child>
-            <Button size="sm">Add database</Button>
+            <Button size="sm"><Plus class="h-4 w-4" /> Add database</Button>
         </DialogTrigger>
         <DialogContent>
             <DialogHeader>

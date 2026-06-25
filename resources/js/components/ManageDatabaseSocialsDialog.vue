@@ -3,6 +3,7 @@ import { ref, watch } from 'vue';
 import { useHttp } from '@inertiajs/vue3';
 import { toast } from 'vue-sonner';
 import { Button } from '@/components/ui/button';
+import { Link2 } from '@lucide/vue';
 import {
     Dialog,
     DialogContent,
@@ -12,12 +13,14 @@ import {
     DialogTitle,
     DialogTrigger,
 } from '@/components/ui/dialog';
+import SocialIcon from '@/components/SocialIcon.vue';
 import { toastFromEnvelope } from '@/lib/notionToast';
 
 interface SocialAccount {
     id: number;
     platform: string;
     name: string | null;
+    profile_picture: string | null;
     database_id: number | null;
 }
 
@@ -74,7 +77,9 @@ function doSave() {
 <template>
     <Dialog v-model:open="open">
         <DialogTrigger as-child>
-            <Button size="sm" variant="outline">Manage accounts</Button>
+            <Button size="sm" variant="outline"
+                ><Link2 class="h-4 w-4" /> Manage accounts</Button
+            >
         </DialogTrigger>
         <DialogContent>
             <DialogHeader>
@@ -100,10 +105,31 @@ function doSave() {
                         class="accent-primary"
                         @change="toggle(s.id)"
                     />
-                    <span class="font-medium">{{ cap(s.platform) }}</span>
-                    <span v-if="s.name" class="text-muted-foreground"
-                        >· {{ s.name }}</span
-                    >
+                    <div class="relative shrink-0">
+                        <img
+                            v-if="s.profile_picture"
+                            :src="s.profile_picture"
+                            alt=""
+                            class="h-8 w-8 rounded-full object-cover"
+                        />
+                        <div v-else class="h-8 w-8 rounded-full bg-muted"></div>
+                        <span
+                            class="absolute -right-0.5 -bottom-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-background ring-1 ring-border"
+                        >
+                            <SocialIcon
+                                :platform="s.platform"
+                                class="h-2.5 w-2.5"
+                            />
+                        </span>
+                    </div>
+                    <div class="min-w-0">
+                        <div class="truncate font-medium">
+                            {{ s.name ?? cap(s.platform) }}
+                        </div>
+                        <div class="text-xs text-muted-foreground">
+                            {{ cap(s.platform) }}
+                        </div>
+                    </div>
                 </label>
             </div>
 
