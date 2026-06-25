@@ -1296,7 +1296,7 @@ class OAuthController extends Controller
             }
 
             if (Auth::user()->isAdmin()) {
-                dump($user);
+                // dump($user);
             }
 
             // Get the long-term access token
