@@ -238,7 +238,7 @@ onMounted(() => {
                     <div
                         v-for="group in groupedSocials"
                         :key="group.platform"
-                        class="space-y-1.5"
+                        class="space-y-1.5 pb-4"
                     >
                         <div
                             class="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase"

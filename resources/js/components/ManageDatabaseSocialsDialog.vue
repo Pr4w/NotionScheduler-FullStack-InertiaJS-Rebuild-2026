@@ -116,7 +116,7 @@ function doSave() {
                 <div
                     v-for="group in groupedSocials"
                     :key="group.platform"
-                    class="space-y-1"
+                    class="space-y-1 pb-4"
                 >
                     <div
                         class="flex items-center gap-1.5 px-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase"
