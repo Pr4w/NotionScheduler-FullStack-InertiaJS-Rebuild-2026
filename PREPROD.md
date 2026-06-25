@@ -67,6 +67,11 @@ fi
 ```
 
 Notes:
+- **Filament static assets** (`/js/filament/*`, `/css/filament/*`,
+  `/fonts/filament/*`) are published by `composer install` (via the
+  `filament:upgrade` hook in `composer.json`). If you ever see 404s for those on
+  a server, run `php artisan filament:assets`. The custom admin theme is built
+  separately by `npm run build` (`viteTheme`), so both steps must run on deploy.
 - The **Queue** worker should use connection `database` (that's what `QUEUE_CONNECTION` is set to).
 - Forge gives a new site a fresh `APP_KEY` — fine (the stored tokens aren't
   `APP_KEY`-encrypted). Paste production's key only if you prefer.
