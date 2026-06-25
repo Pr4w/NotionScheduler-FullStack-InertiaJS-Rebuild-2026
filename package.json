@@ -34,10 +34,14 @@
         "vue-tsc": "^2.2.4"
     },
     "dependencies": {
+        "@fontsource-variable/bricolage-grotesque": "^5.2.10",
+        "@fontsource-variable/geist-mono": "^5.2.8",
+        "@fontsource-variable/hanken-grotesk": "^5.2.8",
         "@inertiajs/vite": "^3.0.0",
         "@inertiajs/vue3": "^3.0.0",
         "@laravel/passkeys": "^0.2.0",
         "@lucide/vue": "^1.17.0",
+        "@tailwindcss/typography": "^0.5.20",
         "@vueuse/core": "^12.8.2",
         "class-variance-authority": "^0.7.1",
         "clsx": "^2.1.1",

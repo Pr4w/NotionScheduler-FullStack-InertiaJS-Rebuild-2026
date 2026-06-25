@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureWizardCompleted;
 use App\Http\Middleware\HandleAppearance;
 use App\Http\Middleware\HandleInertiaRequests;
 use Illuminate\Foundation\Application;
@@ -15,12 +16,23 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->encryptCookies(except: ['appearance', 'sidebar_state']);
+        // ns_affiliate is read raw by the affiliate-attribution flow.
+        $middleware->encryptCookies(except: ['appearance', 'sidebar_state', 'ns_affiliate']);
+
+        // Inbound webhooks (platforms + Stripe) are server-to-server, no CSRF token.
+        $middleware->validateCsrfTokens(except: [
+            'webhooks/*',
+            'stripe/*',
+        ]);
 
         $middleware->web(append: [
             HandleAppearance::class,
             HandleInertiaRequests::class,
             AddLinkHeadersForPreloadedAssets::class,
+        ]);
+
+        $middleware->alias([
+            'wizard' => EnsureWizardCompleted::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

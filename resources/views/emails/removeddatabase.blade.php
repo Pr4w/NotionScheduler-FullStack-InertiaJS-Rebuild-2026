@@ -7,7 +7,7 @@ It looks like one of your NotionScheduler databases has been disconnected from o
 
 The reason it was removed is: {{ $message }}
 
-In order to re-activate your database, head over to the <a href="https://app.notionscheduler.app">NotionScheduler Dashboard</a>. 
+In order to re-activate your database, head over to the <a href="{{ url('/app/dashboard') }}">NotionScheduler Dashboard</a>. 
 
 Thanks,
 

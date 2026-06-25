@@ -1,0 +1,140 @@
+@import "tailwindcss";
+@import '@fontsource-variable/bricolage-grotesque';
+@import '@fontsource-variable/hanken-grotesk';
+@import '@fontsource-variable/geist-mono';
+@plugin "@tailwindcss/typography";
+
+/* ──────────────────────────────────────────────────────────────────────────
+   NotionScheduler — Design System (Tailwind v4, CSS-first config)
+   Aesthetic: editorial "productivity paper" — warm off-white, ink black,
+   a confident tangerine accent, dotted-grid texture, sticker-tag playfulness.
+   ────────────────────────────────────────────────────────────────────────── */
+
+@theme {
+  /* Fonts — distinctive but readable. Bricolage for display, Hanken for body. */
+  --font-display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Hanken Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
+
+  /* Core palette */
+  --color-paper: #faf6ef;        /* warm off-white background */
+  --color-paper-sink: #f1ebdf;   /* slightly recessed surfaces */
+  --color-ink: #1c1a17;          /* near-black text */
+  --color-ink-soft: #57534b;     /* muted body text */
+  --color-line: #e3dccd;         /* hairline borders */
+
+  /* Brand accent — tangerine, not the generic SaaS blue */
+  --color-flare-50: #fff4ed;
+  --color-flare-100: #ffe4d2;
+  --color-flare-300: #ffb27a;
+  --color-flare-500: #f76c1f;
+  --color-flare-600: #e2570d;
+  --color-flare-700: #b9430a;
+
+  /* Secondary pop — used sparingly for accents/badges */
+  --color-mint-100: #d8f3e6;
+  --color-mint-500: #1f9d6b;
+
+  --radius-card: 1.5rem;
+  --shadow-pop: 6px 6px 0 0 var(--color-ink);
+  --shadow-soft: 0 18px 40px -24px rgba(28, 26, 23, 0.45);
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    /* Subtle Notion-like dotted grid texture */
+    background-image: radial-gradient(
+      var(--color-line) 1px,
+      transparent 1px
+    );
+    background-size: 26px 26px;
+  }
+
+  ::selection {
+    background-color: var(--color-flare-300);
+    color: var(--color-ink);
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+    line-height: 1.02;
+  }
+}
+
+@layer utilities {
+  /* Hard "sticker" shadow that snaps on hover */
+  .btn-pop {
+    box-shadow: var(--shadow-pop);
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+  }
+  .btn-pop:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: 8px 8px 0 0 var(--color-ink);
+  }
+  .btn-pop:active {
+    transform: translate(2px, 2px);
+    box-shadow: 2px 2px 0 0 var(--color-ink);
+  }
+
+  .card-pop {
+    box-shadow: var(--shadow-pop);
+  }
+
+  .tag-rotate {
+    transform: rotate(-3deg);
+  }
+
+  .dotted-rule {
+    background-image: linear-gradient(
+      to right,
+      var(--color-line) 33%,
+      transparent 0%
+    );
+    background-size: 12px 2px;
+    background-repeat: repeat-x;
+  }
+
+  /* Staggered entrance for hero — CSS only */
+  .reveal {
+    opacity: 0;
+    transform: translateY(16px);
+    animation: reveal 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+  }
+  .reveal-1 { animation-delay: 0.05s; }
+  .reveal-2 { animation-delay: 0.15s; }
+  .reveal-3 { animation-delay: 0.25s; }
+  .reveal-4 { animation-delay: 0.35s; }
+
+  @keyframes reveal {
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .reveal {
+      animation: none;
+      opacity: 1;
+      transform: none;
+    }
+    html { scroll-behavior: auto; }
+  }
+
+  .marquee-track {
+    animation: marquee 28s linear infinite;
+  }
+  @keyframes marquee {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+}

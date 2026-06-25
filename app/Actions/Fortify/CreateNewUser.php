@@ -14,20 +14,22 @@ class CreateNewUser implements CreatesNewUsers
     /**
      * Validate and create a newly registered user.
      *
-     * The production schema uses `username` (not `name`); login remains by email.
+     * The default Starter Kit register view posts a `name` field; the production
+     * schema stores the display name in the `username` column. We map across that
+     * boundary here so the default views work unchanged.
      *
      * @param  array<string, string>  $input
      */
     public function create(array $input): User
     {
         Validator::make($input, [
-            'username' => ['required', 'string', 'max:255'],
+            'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'email', 'max:255', 'unique:users,email'],
             'password' => $this->passwordRules(),
         ])->validate();
 
         return User::create([
-            'username' => $input['username'],
+            'username' => $input['name'],
             'email' => $input['email'],
             'password' => $input['password'],
         ]);

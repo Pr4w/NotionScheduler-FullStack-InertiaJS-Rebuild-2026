@@ -46,11 +46,22 @@ class User extends Authenticatable implements FilamentUser, HasName, MustVerifyE
     protected $appends = [
         // 'is_subscribed',
         'subscription_details',
+        'name',
     ];
 
     protected $with = [
         'affiliates',
     ];
+
+    /**
+     * The default Starter Kit views/layout read `auth.user.name`; the production
+     * schema stores the display name in `username`. Expose it as `name` so the
+     * default frontend works unchanged.
+     */
+    protected function name(): Attribute
+    {
+        return Attribute::get(fn (): ?string => $this->username);
+    }
 
     protected function subscriptionDetails(): Attribute
     {

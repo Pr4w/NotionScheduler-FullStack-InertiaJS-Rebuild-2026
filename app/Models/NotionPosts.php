@@ -2,28 +2,25 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Casts\Attribute;
-
 use App\Enums\SocialNetworks;
-use \FFMpeg\FFProbe;
-
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\Log;
-
 use Carbon\Carbon;
+use FFMpeg\FFProbe;
+use Guava\Calendar\Contracts\Eventable;
+use Guava\Calendar\ValueObjects\CalendarEvent;
+use Illuminate\Database\Eloquent\Casts\Attribute;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use Notion\Common\FileType;
 
-use App\Models\User;
-
-// NOTE: Guava\Calendar Eventable integration (toCalendarEvent) is deferred to
-// Phase 6 (Filament admin), where guava/calendar gets reinstalled.
-class NotionPosts extends Model
+class NotionPosts extends Model implements Eventable
 {
     // Define the table name for this model
     protected $table = 'notion_posts';
+
     protected $primaryKey = 'id';
 
     protected $hidden = [
@@ -49,18 +46,45 @@ class NotionPosts extends Model
         'posted_foreign_id',
         'in_flight',
         'in_flight_start',
-        'metrics_last_scraped_at'
+        'metrics_last_scraped_at',
     ];
 
     protected $appends = [
-        // 'is_subscribed', 
-        'permalink'
+        // 'is_subscribed',
+        'permalink',
     ];
+
+    /**
+     * Render this post as a calendar event for the Filament admin calendar
+     * (Guava\Calendar). Platform colour is pulled from config/solutions.php so
+     * the admin calendar and the public marketing site share one source of truth.
+     */
+    public function toCalendarEvent(): CalendarEvent
+    {
+        $emoji = match (true) {
+            $this->in_flight === true || $this->in_flight === 1 => '⏳',
+            in_array(strtolower((string) $this->status), ['error', 'failed', 'deleted']) => '⚠️',
+            strtolower((string) $this->status) === 'posted' => '✅',
+            default => '🕓',
+        };
+
+        $platformSlug = strtolower((string) $this->platform);
+        $accent = config("solutions.{$platformSlug}.accent", '#57534b');
+
+        $title = sprintf('%s #%s · %s', $emoji, $this->userid, ucfirst($platformSlug ?: 'unknown'));
+
+        return CalendarEvent::make($this)
+            ->title($title)
+            ->start($this->scheduled_date)
+            ->end($this->scheduled_date)
+            ->backgroundColor($accent)
+            ->textColor('#ffffff');
+    }
 
     /**
      * NOTE - Relationships
      */
-     public function metrics(): HasMany
+    public function metrics(): HasMany
     {
         return $this->hasMany(NotionPostMetric::class, 'content_id');
     }
@@ -80,57 +104,69 @@ class NotionPosts extends Model
         return $this->belongsTo(NotionSocialAccounts::class, 'account_id', 'id');
     }
 
-    public function user(): BelongsTo {
+    public function user(): BelongsTo
+    {
         return $this->belongsTo(User::class, 'userid', 'id');
     }
 
-
-    protected function permalink(): Attribute {
+    protected function permalink(): Attribute
+    {
         return Attribute::make(
             get: function (mixed $value, array $attributes) {
-                if ($attributes['status'] == 'posted') {
-                    if ($attributes['platform'] == 'facebook') {
-                        return 'https://facebook.com/' . $attributes['posted_foreign_id'];
-                    }
-                    if ($attributes['platform'] == 'instagram') {
-                        if (!$attributes['platform_is_story']) {
-                            return self::instagram_id_to_url($attributes['posted_foreign_id']);
-                        }
-                    }
-                    return "https://google.com";
+                // Only return a permalink for platforms we can build one for
+                // RELIABLY. Everything else returns null so the UI never links to
+                // a non-existent page.
+                //
+                // TODO (later): Instagram (foreign id isn't the shortcode),
+                // Threads, TikTok (needs the account username), and LinkedIn
+                // (foreign id is empty) still need their permalink logic.
+                if (($attributes['status'] ?? null) !== 'posted') {
+                    return null;
                 }
+
+                $foreignId = $attributes['posted_foreign_id'] ?? null;
+                if (empty($foreignId)) {
+                    return null;
+                }
+
+                // Facebook feed posts (not stories) link reliably by foreign id.
+                if ($attributes['platform'] === 'facebook' && empty($attributes['platform_is_story'])) {
+                    return 'https://www.facebook.com/'.$foreignId;
+                }
+
                 return null;
             }
         );
     }
 
-    public static function instagram_id_to_url ($instagram_id){
+    public static function instagram_id_to_url($instagram_id)
+    {
 
-        $url_prefix = "https://www.instagram.com/p/";
-    
-        if(!empty(strpos($instagram_id, '_'))){
-    
+        $url_prefix = 'https://www.instagram.com/p/';
+
+        if (! empty(strpos($instagram_id, '_'))) {
+
             $parts = explode('_', $instagram_id);
-    
+
             $instagram_id = $parts[0];
-    
+
             $userid = $parts[1];
-    
+
         }
-    
+
         $alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
         $url_suffix = '';
-    
-        while($instagram_id > 0){
-    
+
+        while ($instagram_id > 0) {
+
             $remainder = $instagram_id % 64;
-            $instagram_id = ($instagram_id-$remainder) / 64;
-            $url_suffix = $alphabet[$remainder] . $url_suffix;
-    
-        };
-    
+            $instagram_id = ($instagram_id - $remainder) / 64;
+            $url_suffix = $alphabet[$remainder].$url_suffix;
+
+        }
+
         return $url_prefix.$url_suffix;
-    
+
     }
 
     // const BASE64URL_CHARMAP = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
@@ -256,8 +292,8 @@ class NotionPosts extends Model
     //     return $encoded;
     // }
 
-
-    public static function removeDashesFromPageId($id) {
+    public static function removeDashesFromPageId($id)
+    {
 
         return str_replace('-', '', $id);
 
@@ -267,16 +303,16 @@ class NotionPosts extends Model
     // {
     //     return $this->hasOne(NotionSocialAccounts::class, 'id', 'account_id');
     // }
-    
 
-    public static function getAllContentFromChildren($contents) {
+    public static function getAllContentFromChildren($contents)
+    {
 
         // Loop through the content
         $content_final = [];
         foreach ($contents as $content) {
             if (isset($content->text)) {
                 if (is_array($content->text)) {
-                    $new_block = "";
+                    $new_block = '';
                     foreach ($content->text as $ctextunit) {
                         $new_block .= $ctextunit->toString();
                     }
@@ -284,7 +320,7 @@ class NotionPosts extends Model
                 } else {
                     // NOTE - We really never should arrive here, but you never know...
                     // No text, means we should break line
-                    $content_final[] = "";
+                    $content_final[] = '';
                 }
             }
         }
@@ -296,16 +332,19 @@ class NotionPosts extends Model
 
     }
 
-    public static function getTypeFromMediaProp($media_file) {
-        if ($media_file->type instanceof \Notion\Common\FileType) {
+    public static function getTypeFromMediaProp($media_file)
+    {
+        if ($media_file->type instanceof FileType) {
             $type = $media_file->type->value;
         } else {
             $type = $media_file->type;
         }
+
         return $type;
     }
 
-    public static function getAllMediaFromProps2($media_base) {
+    public static function getAllMediaFromProps2($media_base)
+    {
 
         // Init
         $media = [];
@@ -324,7 +363,8 @@ class NotionPosts extends Model
 
     }
 
-    public static function getThumbnailFromProps2($thumbnail_base) {
+    public static function getThumbnailFromProps2($thumbnail_base)
+    {
 
         // Init
         $media = [];
@@ -363,33 +403,43 @@ class NotionPosts extends Model
 
     // }
 
-    public static function getImageFileTypes() {
-        return ["jpg","jpeg","png","gif","tiff","heif"];
+    public static function getImageFileTypes()
+    {
+        return ['jpg', 'jpeg', 'png', 'gif', 'tiff', 'heif'];
     }
-    public static function getVideoFileTypes() {
-        return ["mov","avi","mp4"];
+
+    public static function getVideoFileTypes()
+    {
+        return ['mov', 'avi', 'mp4'];
     }
-    public static function getExtensionFromMedia($media_file) {
+
+    public static function getExtensionFromMedia($media_file)
+    {
         return strtolower(pathinfo(parse_url($media_file, PHP_URL_PATH), PATHINFO_EXTENSION));
     }
-    public static function getFilenameFromMedia($media_file) {
+
+    public static function getFilenameFromMedia($media_file)
+    {
         return pathinfo(parse_url($media_file, PHP_URL_PATH), PATHINFO_FILENAME);
     }
 
-    public static function joinRequirements(...$arrays) {
+    public static function joinRequirements(...$arrays)
+    {
         $arr = [];
         foreach ($arrays as $array) {
             $arr = array_merge($arr, $array);
         }
         $arr = array_unique($arr);
-        return (implode(', ', $arr));
+
+        return implode(', ', $arr);
     }
 
-    public static function checkVideoFile($url) {
-        
+    public static function checkVideoFile($url)
+    {
+
         $probe = FFProbe::create();
         $properties = $probe
-            ->streams( $url )   // extracts streams informations
+            ->streams($url)   // extracts streams informations
             ->videos()                      // filters video streams
             ->first()
             ->all();
@@ -400,36 +450,41 @@ class NotionPosts extends Model
             'aspect_ratio' => $properties['width'] / $properties['height'],
             'duration' => $properties['duration'],
             'frame_rate' => $properties['avg_frame_rate'],
-            'size' => self::getContentLength($url)
+            'size' => self::getContentLength($url),
         ];
 
     }
 
-    public static function getContentLength($url) {
+    public static function getContentLength($url)
+    {
         $headers = get_headers($url, 1);
-        if (!isset($headers['Content-Length'])) {
-            Log::error("NotionPosts - 385  - Error - No content length defined");
+        if (! isset($headers['Content-Length'])) {
+            Log::error('NotionPosts - 385  - Error - No content length defined');
             Log::error($headers);
             Log::info('Returning 0 as a default');
+
             return 0;
         }
+
         return $headers['Content-Length'];
     }
 
-    public static function storeFileInLocalStorage($userid, $media) {
+    public static function storeFileInLocalStorage($userid, $media)
+    {
 
         $folder = 'public/uploadable_media/';
-        $filename = 'user' . $userid . '_rand' . bin2hex(random_bytes(10)) . '-' . Carbon::now()->timestamp . '.' . $media['extension'];
+        $filename = 'user'.$userid.'_rand'.bin2hex(random_bytes(10)).'-'.Carbon::now()->timestamp.'.'.$media['extension'];
         $store = Storage::put(
-            $folder . $filename,
+            $folder.$filename,
             fopen($media['url'], 'r')
         );
-        return 'https://api.notionscheduler.app/storage/uploadable_media/' . $filename;
+
+        return 'https://api.notionscheduler.app/storage/uploadable_media/'.$filename;
 
     }
 
-
-    public static function checkPostIsValid($post, $content = null, $media = null, $thumbnail = null) {
+    public static function checkPostIsValid($post, $content = null, $media = null, $thumbnail = null)
+    {
 
         // Init
         $success = true;
@@ -450,12 +505,12 @@ class NotionPosts extends Model
                         if ($m['type'] != 'file') {
                             // Log::warning("CheckPostIsValid 441 - Found a media that isn't a file type, you might want to debug it - ID is " . $post->id . " and the media array is...");
                             // Log::info($m['type']);
-                            $errors[] = "Media files should be directly uploaded to Notion, not added as external URLs.";
+                            $errors[] = 'Media files should be directly uploaded to Notion, not added as external URLs.';
 
                             return [
                                 'success' => false,
                                 'errors' => $errors,
-                                'probe' => $probe 
+                                'probe' => $probe,
                             ];
 
                             break;
@@ -480,24 +535,24 @@ class NotionPosts extends Model
                 if (is_array($thumbnail)) {
                     if (isset($thumbnail['type'])) {
                         if ($thumbnail['type'] != 'file') {
-                            Log::warning("CheckPostIsValid 463 - Found a thumbnail that isn't a file type, you might want to debug it - ID is " . $post->id . " and the media array is...");
-                            $errors[] = "Thumbnail files should be directly uploaded to Notion, not added as external URLs.";
+                            Log::warning("CheckPostIsValid 463 - Found a thumbnail that isn't a file type, you might want to debug it - ID is ".$post->id.' and the media array is...');
+                            $errors[] = 'Thumbnail files should be directly uploaded to Notion, not added as external URLs.';
 
                             return [
                                 'success' => false,
                                 'errors' => $errors,
-                                'probe' => $probe 
+                                'probe' => $probe,
                             ];
-                            
+
                         }
                     }
-                    
+
                 }
             } catch (\Exception $e) {
                 Log::warning(473);
                 Log::info($e);
             }
-            
+
             // }
 
             // Get the user submitting the post
@@ -523,7 +578,7 @@ class NotionPosts extends Model
                     ->count();
 
                 if ($post_count > $package['post_limit_count']) {
-                    $errors[] = "Your subscription tier grants you a maximum of " . $package['post_limit_count'] . " social media publications per month. Head over to the subscribe page to remove this limitation.";
+                    $errors[] = 'Your subscription tier grants you a maximum of '.$package['post_limit_count'].' social media publications per month. Head over to the subscribe page to remove this limitation.';
                 }
             }
 
@@ -531,8 +586,6 @@ class NotionPosts extends Model
             Log::info(455);
             Log::info($e);
         }
-
-
 
         // SECTION - Facebook
         if ($post->platform == 'facebook') {
@@ -553,7 +606,7 @@ class NotionPosts extends Model
                 if (count($media) == 0) {
                     $errors[] = "You don't have any media attached for this Facebook story.";
                 } elseif (count($media) > 1) {
-                    $errors[] = "You can only post ony Facebook story at a time. Create multiple posts if you would like to post multiple stories.";
+                    $errors[] = 'You can only post ony Facebook story at a time. Create multiple posts if you would like to post multiple stories.';
                 } else {
                     // CASE - Story post is a video
                     if (in_array($media[0]['extension'], $requirements->story->video->extensions)) {
@@ -563,10 +616,10 @@ class NotionPosts extends Model
 
                         // Check duration
                         if (
-                            $probe['duration'] < $requirements->story->video->min_duration or 
+                            $probe['duration'] < $requirements->story->video->min_duration or
                             $probe['duration'] > $requirements->story->video->max_duration
                         ) {
-                            $errors[] = "Facebook video stories have to last between " . $requirements->story->video->min_duration . ' and ' . $requirements->story->video->max_duration . ' seconds';
+                            $errors[] = 'Facebook video stories have to last between '.$requirements->story->video->min_duration.' and '.$requirements->story->video->max_duration.' seconds';
                         }
 
                         // Check size
@@ -576,19 +629,18 @@ class NotionPosts extends Model
 
                         // Check dimensions
                         if (
-                            $probe['height'] < $requirements->story->video->min_height or 
+                            $probe['height'] < $requirements->story->video->min_height or
                             $probe['width'] < $requirements->story->video->min_width or
-                            $probe['height'] > $requirements->story->video->max_height or 
+                            $probe['height'] > $requirements->story->video->max_height or
                             $probe['width'] > $requirements->story->video->max_width
                         ) {
-                            $errors[] = "Facebook video stories dimensions should be between " .
+                            $errors[] = 'Facebook video stories dimensions should be between '.
                             $requirements->story->video->min_width.'x'.$requirements->story->video->min_height
-                            . ' and ' . 
+                            .' and '.
                             $requirements->story->video->max_width.'x'.$requirements->story->video->max_height;
                         }
 
-
-                    // CASE - Story post is photo
+                        // CASE - Story post is photo
                     } elseif (in_array($media[0]['extension'], $requirements->story->photo->extensions)) {
 
                         // Run checks?
@@ -596,20 +648,19 @@ class NotionPosts extends Model
 
                         // Check
                         if ($file_size > $requirements->story->photo->max_size) {
-                            $errors[] = "Facebook photo stories can't weigh more than " . round($requirements->story->photo->max_size / 1024 / 1024) . "MB";
+                            $errors[] = "Facebook photo stories can't weigh more than ".round($requirements->story->photo->max_size / 1024 / 1024).'MB';
                         }
 
-
-                    // CASE - Post is neither a valid photo or video format
+                        // CASE - Post is neither a valid photo or video format
                     } else {
-                        $errors[] = "Facebook stories only accept the following file types: " . self::joinRequirements(
+                        $errors[] = 'Facebook stories only accept the following file types: '.self::joinRequirements(
                             $requirements->story->video->extensions,
                             $requirements->story->photo->extensions
                         );
                     }
                 }
 
-            // CASE - Not a story
+                // CASE - Not a story
             } else {
 
                 // CASE - Single post
@@ -618,9 +669,9 @@ class NotionPosts extends Model
                     // CASE - Photo post
                     if (in_array($media[0]['extension'], $requirements->image->extensions)) {
 
-                    // CASE - Video or reel
+                        // CASE - Video or reel
                     } elseif (
-                        in_array($media[0]['extension'], $requirements->video->extensions) or 
+                        in_array($media[0]['extension'], $requirements->video->extensions) or
                         in_array($media[0]['extension'], $requirements->reel->extensions)
                     ) {
 
@@ -628,21 +679,21 @@ class NotionPosts extends Model
                         $probe = self::checkVideoFIle($media[0]['url']);
 
                         // CASE - Reel
-                        if ($probe['aspect_ratio'] == 9/16) {
+                        if ($probe['aspect_ratio'] == 9 / 16) {
 
                             // Check extension
-                            if (!in_array($media[0]['extension'], $requirements->reel->extensions)) {
-                                $errors[] = "Facebook reels only accept the following file types: " . self::joinRequirements(
+                            if (! in_array($media[0]['extension'], $requirements->reel->extensions)) {
+                                $errors[] = 'Facebook reels only accept the following file types: '.self::joinRequirements(
                                     $requirements->reel->extensions
                                 );
                             }
 
                             // Check duration
                             if (
-                                $probe['duration'] < $requirements->reel->min_duration or 
+                                $probe['duration'] < $requirements->reel->min_duration or
                                 $probe['duration'] > $requirements->reel->max_duration
                             ) {
-                                $errors[] = "Facebook reels have to last between " . $requirements->reel->min_duration . ' and ' . $requirements->reel->max_duration . ' seconds';
+                                $errors[] = 'Facebook reels have to last between '.$requirements->reel->min_duration.' and '.$requirements->reel->max_duration.' seconds';
                             }
 
                             // Check size
@@ -652,66 +703,63 @@ class NotionPosts extends Model
 
                             // Check dimensions
                             if (
-                                $probe['height'] < $requirements->reel->min_height or 
-                                $probe['width'] < $requirements->reel->min_width or 
-                                $probe['height'] > $requirements->reel->max_height or 
+                                $probe['height'] < $requirements->reel->min_height or
+                                $probe['width'] < $requirements->reel->min_width or
+                                $probe['height'] > $requirements->reel->max_height or
                                 $probe['width'] > $requirements->reel->max_width
                             ) {
-                                $errors[] = "Facebook reel dimenseions should be between " .
+                                $errors[] = 'Facebook reel dimenseions should be between '.
                                 $requirements->reel->min_width.'x'.$requirements->reel->min_height
-                                . ' and ' . 
+                                .' and '.
                                 $requirements->reel->max_width.'x'.$requirements->reel->max_height;
                             }
 
-                        // CASE - Regular video
+                            // CASE - Regular video
                         } else {
 
                             // Check extension
-                            if (!in_array($media[0]['extension'], $requirements->video->extensions)) {
-                                $errors[] = "Facebook videos only accept the following file types: " . self::joinRequirements(
+                            if (! in_array($media[0]['extension'], $requirements->video->extensions)) {
+                                $errors[] = 'Facebook videos only accept the following file types: '.self::joinRequirements(
                                     $requirements->video->extensions
                                 );
                             }
 
                             // Check duration
                             if (
-                                $probe['duration'] < $requirements->video->min_duration or 
+                                $probe['duration'] < $requirements->video->min_duration or
                                 $probe['duration'] > $requirements->video->max_duration
                             ) {
-                                $errors[] = "Facebook videos have to last between " . $requirements->video->min_duration . ' and ' . $requirements->video->max_duration . ' seconds';
+                                $errors[] = 'Facebook videos have to last between '.$requirements->video->min_duration.' and '.$requirements->video->max_duration.' seconds';
                             }
 
                             // Check size
                             if ($probe['size'] > $requirements->video->max_size) {
-                                $errors[] = "Facebook video stories can't weigh more than " . round($requirements->story->video->max_size / 1024 / 1024 / 1024) . "GB";
+                                $errors[] = "Facebook video stories can't weigh more than ".round($requirements->story->video->max_size / 1024 / 1024 / 1024).'GB';
                             }
 
                             // Check dimensions
                             // if (
-                            //     $probe['height'] < $requirements->reel->min_height or 
-                            //     $probe['width'] < $requirements->reel->min_width or 
-                            //     $probe['height'] > $requirements->reel->max_height or 
+                            //     $probe['height'] < $requirements->reel->min_height or
+                            //     $probe['width'] < $requirements->reel->min_width or
+                            //     $probe['height'] > $requirements->reel->max_height or
                             //     $probe['width'] > $requirements->reel->max_width
                             // ) {
                             //     $errors[] = "Facebook reel dimenseions should be between " .
                             //     $requirements->reel->min_width.'x'.$requirements->reel->min_height
-                            //     . ' and ' . 
+                            //     . ' and ' .
                             //     $requirements->reel->max_width.'x'.$requirements->reel->max_height;
                             // }
 
-
                         }
 
-                    // CASE - Other
+                        // CASE - Other
                     } else {
-                        $errors[] = "Facebook stories only accept the following file types: " . self::joinRequirements(
+                        $errors[] = 'Facebook stories only accept the following file types: '.self::joinRequirements(
                             $requirements->video->extensions,
                             $requirements->reel->extensions,
                             $requirements->image->extensions
                         );
                     }
-
-                    
 
                 }
 
@@ -722,8 +770,8 @@ class NotionPosts extends Model
                     foreach ($media as $m) {
 
                         // Check extension
-                        if (!in_array($m['extension'], $requirements->image->extensions)) {
-                            $errors[] = "Facebook carousels can only contain content with the following file types: " . self::joinRequirements(
+                        if (! in_array($m['extension'], $requirements->image->extensions)) {
+                            $errors[] = 'Facebook carousels can only contain content with the following file types: '.self::joinRequirements(
                                 $requirements->image->extensions
                             );
                         }
@@ -736,8 +784,8 @@ class NotionPosts extends Model
 
             // CASE - Check the thumbnail
             if ($thumbnail) {
-                if (!in_array($thumbnail['extension'], $requirements->thumbnail->extensions)) {
-                    $errors[] = "Facebook video thumbnails can only have the following extensions: " . implode(", ",  $requirements->thumbnail->extensions);
+                if (! in_array($thumbnail['extension'], $requirements->thumbnail->extensions)) {
+                    $errors[] = 'Facebook video thumbnails can only have the following extensions: '.implode(', ', $requirements->thumbnail->extensions);
                 }
             }
 
@@ -749,14 +797,14 @@ class NotionPosts extends Model
             // Set the social
             $requirements = SocialNetworks::INSTAGRAM->requirements();
 
-            $character_count = mb_strlen($content, "UTF-8");
+            $character_count = mb_strlen($content, 'UTF-8');
             if ($character_count > $requirements->caption->max_characters) {
-                $errors[] = "Instagram captions can't be over ".$requirements->caption->max_characters." characters";
+                $errors[] = "Instagram captions can't be over ".$requirements->caption->max_characters.' characters';
             }
 
             // Check media count
             if (count($media) < 1) {
-                $errors[] = "You have to have at least one media file in ordrer to upload to Instagram.";
+                $errors[] = 'You have to have at least one media file in ordrer to upload to Instagram.';
             } else {
 
                 // CASE - Story
@@ -764,10 +812,10 @@ class NotionPosts extends Model
 
                     // Check count
                     if (count($media) > 1) {
-                        $errors[] = "You can only post one Instagram story at a time. Create multiple posts if you would like to post multiple stories.";
+                        $errors[] = 'You can only post one Instagram story at a time. Create multiple posts if you would like to post multiple stories.';
                     } else {
 
-                         // CASE - Story post is a video
+                        // CASE - Story post is a video
                         if (in_array($media[0]['extension'], $requirements->story->video->extensions)) {
 
                             // Check the video file
@@ -775,29 +823,28 @@ class NotionPosts extends Model
 
                             // Check duration
                             if (
-                                $probe['duration'] < $requirements->story->video->min_duration or 
+                                $probe['duration'] < $requirements->story->video->min_duration or
                                 $probe['duration'] > $requirements->story->video->max_duration
                             ) {
-                                $errors[] = "Instagram video stories have to last between " . $requirements->story->video->min_duration . ' and ' . $requirements->story->video->max_duration . ' seconds';
+                                $errors[] = 'Instagram video stories have to last between '.$requirements->story->video->min_duration.' and '.$requirements->story->video->max_duration.' seconds';
                             }
 
                             // Check size
                             if ($probe['size'] > $requirements->story->video->max_size) {
-                                $errors[] = "Instagram video stories can't weigh more than " . round($requirements->story->video->max_size / 1024 / 1024) . "MB";
+                                $errors[] = "Instagram video stories can't weigh more than ".round($requirements->story->video->max_size / 1024 / 1024).'MB';
                             }
 
                             // Check dimensions
                             if (
-                                // $probe['height'] < $requirements->story->video->min_height or 
+                                // $probe['height'] < $requirements->story->video->min_height or
                                 // $probe['width'] < $requirements->story->video->min_width or
-                                $probe['height'] > $requirements->story->video->max_height // or 
+                                $probe['height'] > $requirements->story->video->max_height // or
                                 // $probe['width'] > $requirements->story->video->max_width
                             ) {
-                                $errors[] = "Instagram video stories can't be taller than " . $requirements->story->video->max_height . "px";
+                                $errors[] = "Instagram video stories can't be taller than ".$requirements->story->video->max_height.'px';
                             }
 
-
-                        // CASE - Story post is photo
+                            // CASE - Story post is photo
                         } elseif (in_array($media[0]['extension'], $requirements->story->photo->extensions)) {
 
                             // Run checks?
@@ -805,13 +852,12 @@ class NotionPosts extends Model
 
                             // Check
                             if ($file_size > $requirements->story->photo->max_size) {
-                                $errors[] = "Instagram photo stories can't weigh more than " . round($requirements->story->photo->max_size / 1024 / 1024) . "MB";
+                                $errors[] = "Instagram photo stories can't weigh more than ".round($requirements->story->photo->max_size / 1024 / 1024).'MB';
                             }
 
-
-                        // CASE - Post is neither a valid photo or video format
+                            // CASE - Post is neither a valid photo or video format
                         } else {
-                            $errors[] = "Instagram stories only accept the following file types: " . self::joinRequirements(
+                            $errors[] = 'Instagram stories only accept the following file types: '.self::joinRequirements(
                                 $requirements->story->video->extensions,
                                 $requirements->story->photo->extensions
                             );
@@ -819,8 +865,7 @@ class NotionPosts extends Model
 
                     }
 
-
-                // CASE - Not story
+                    // CASE - Not story
                 } else {
 
                     // Check media count
@@ -836,12 +881,12 @@ class NotionPosts extends Model
                                 // Check
                                 $file_size = self::getContentLength($m['url']);
 
-                                // Check 
+                                // Check
                                 if ($file_size > $requirements->image->max_size) {
-                                    $errors[] = "Instagram photos can't weigh more than " . round($requirements->image->max_size / 1024 / 1024) . "MB";
+                                    $errors[] = "Instagram photos can't weigh more than ".round($requirements->image->max_size / 1024 / 1024).'MB';
                                 }
 
-                            // CASE - Video
+                                // CASE - Video
                             } elseif (in_array($m['extension'], $requirements->reel->extensions)) {
 
                                 // Check the video file
@@ -849,31 +894,30 @@ class NotionPosts extends Model
 
                                 // Check duration
                                 if (
-                                    $probe['duration'] < $requirements->reel->min_duration or 
+                                    $probe['duration'] < $requirements->reel->min_duration or
                                     $probe['duration'] > $requirements->reel->max_duration
                                 ) {
-                                    $errors[] = "Instagram video posts have to last between " . $requirements->reel->min_duration . ' and ' . $requirements->reel->max_duration . ' seconds';
+                                    $errors[] = 'Instagram video posts have to last between '.$requirements->reel->min_duration.' and '.$requirements->reel->max_duration.' seconds';
                                 }
 
                                 // Check size
                                 if ($probe['size'] > $requirements->reel->max_size) {
-                                    $errors[] = "Instagram video posts can't weigh more than " . round($requirements->reel->max_size / 1024 / 1024 / 1024) . "GB";
+                                    $errors[] = "Instagram video posts can't weigh more than ".round($requirements->reel->max_size / 1024 / 1024 / 1024).'GB';
                                 }
 
                                 // Check dimensions
                                 if (
-                                    // $probe['height'] < $requirements->reel->min_height or 
+                                    // $probe['height'] < $requirements->reel->min_height or
                                     // $probe['width'] < $requirements->reel->min_width or
-                                    $probe['height'] > $requirements->reel->max_height // or 
+                                    $probe['height'] > $requirements->reel->max_height // or
                                     // $probe['width'] > $requirements->reel->max_width
                                 ) {
-                                    $errors[] = "Instagram video posts can't be taller than " . $requirements->reel->max_height . "px";
+                                    $errors[] = "Instagram video posts can't be taller than ".$requirements->reel->max_height.'px';
                                 }
 
-
-                            // CASE - Other
+                                // CASE - Other
                             } else {
-                                $errors[] = "Instagram posts only accept the following file types: " . self::joinRequirements(
+                                $errors[] = 'Instagram posts only accept the following file types: '.self::joinRequirements(
                                     $requirements->image->extensions,
                                     $requirements->reel->extensions
                                 );
@@ -882,56 +926,50 @@ class NotionPosts extends Model
                         }
                     }
 
-                    
-
-
                 }
-
-                
 
             }
 
         }
 
         // SECTION - TikTok
-        if ($post->platform == "tiktok") {
+        if ($post->platform == 'tiktok') {
 
             // Set requiremenbts
             $requirements = SocialNetworks::TIKTOK->requirements();
 
-            if (!$is_content_empty) {
-                
+            if (! $is_content_empty) {
+
                 // $character_count = mb_strlen($content, "UTF-8");
                 $character_count = strlen(mb_convert_encoding($content, 'UTF-16')) / 2;
-                
+
                 if ($character_count > $requirements->caption->max_characters) {
                     Log::info(878);
                     Log::info($content);
                     Log::info($character_count);
-                    $errors[] = "TikTok posts can't have a caption that is over ".$requirements->caption->max_characters / 2 ." characters";
+                    $errors[] = "TikTok posts can't have a caption that is over ".$requirements->caption->max_characters / 2 .' characters';
                 }
             }
 
-
             // CASE - No media
             if (count($media) < 1) {
-                $errors[] = "You have to have at least one media file in ordrer to upload to TikTok.";
+                $errors[] = 'You have to have at least one media file in ordrer to upload to TikTok.';
 
             } elseif (count($media) > 35) {
                 $errors[] = "You can't upload more than 35 images at once to a TikTok Carousel";
 
-            // CASE - Has more than 1 media
+                // CASE - Has more than 1 media
             } elseif (count($media) > 1 && count($media) <= 35) {
 
                 // Check if ALL of the files are images
                 foreach ($media as $m) {
-                    if (!in_array($m['extension'], $requirements->image->extensions)) {
-                        $errors[] = "You can't upload a mix of images & videos on TikTok as a carousel. Images must have one of the following formats: " . self::joinRequirements($requirements->image->extensions);
+                    if (! in_array($m['extension'], $requirements->image->extensions)) {
+                        $errors[] = "You can't upload a mix of images & videos on TikTok as a carousel. Images must have one of the following formats: ".self::joinRequirements($requirements->image->extensions);
                     }
                     break;
                 }
-            
-            // CASE - Has exactly 1 media
+
+                // CASE - Has exactly 1 media
             } else {
 
                 // CASE - Photo
@@ -940,13 +978,12 @@ class NotionPosts extends Model
                     // Check
                     $file_size = self::getContentLength($media[0]['url']);
 
-                    // Check 
+                    // Check
                     if ($file_size > $requirements->image->max_size) {
-                        $errors[] = "TikTok photo posts can't weigh more than " . round($requirements->image->max_size / 1024 / 1024) . "MB";
+                        $errors[] = "TikTok photo posts can't weigh more than ".round($requirements->image->max_size / 1024 / 1024).'MB';
                     }
 
-
-                // CASE - Video
+                    // CASE - Video
                 } elseif (in_array($media[0]['extension'], $requirements->video->extensions)) {
 
                     // Check the video file
@@ -954,40 +991,40 @@ class NotionPosts extends Model
 
                     // Check duration
                     if (
-                        $probe['duration'] < $requirements->video->min_duration or 
+                        $probe['duration'] < $requirements->video->min_duration or
                         $probe['duration'] > $requirements->video->max_duration
                     ) {
-                        $errors[] = "TikTok video posts have to last between " . $requirements->video->min_duration . ' and ' . $requirements->video->max_duration . ' seconds';
+                        $errors[] = 'TikTok video posts have to last between '.$requirements->video->min_duration.' and '.$requirements->video->max_duration.' seconds';
                     }
 
                     // Check size
                     if ($probe['size'] > $requirements->video->max_size) {
-                        $errors[] = "TikTok video posts can't weigh more than " . round($requirements->video->max_size / 1024 / 1024 / 1024) . "GB";
+                        $errors[] = "TikTok video posts can't weigh more than ".round($requirements->video->max_size / 1024 / 1024 / 1024).'GB';
                     }
 
                     // Check dimensions
                     if (
-                        $probe['height'] < $requirements->video->min_height or 
+                        $probe['height'] < $requirements->video->min_height or
                         $probe['width'] < $requirements->video->min_width or
-                        $probe['height'] > $requirements->video->max_height or 
+                        $probe['height'] > $requirements->video->max_height or
                         $probe['width'] > $requirements->video->max_width
                     ) {
-                        $errors[] = "TikTok video posts dimenseions should be between " .
+                        $errors[] = 'TikTok video posts dimenseions should be between '.
                         $requirements->video->min_width.'x'.$requirements->video->min_height
-                        . ' and ' . 
+                        .' and '.
                         $requirements->video->max_width.'x'.$requirements->video->max_height;
                     }
 
-                // CASE - Neither
+                    // CASE - Neither
                 } else {
-                    $errors[] = "Your file " . $media[0]['filename'] . " isn't a valid photo or video format, we won't be able to upload it. Only the following filetypes are authorized: " . 
+                    $errors[] = 'Your file '.$media[0]['filename']." isn't a valid photo or video format, we won't be able to upload it. Only the following filetypes are authorized: ".
                     self::joinRequirements($requirements->image->extensions, $requirements->video->extensions);
                 }
             }
 
         }
 
-        // SECTION - LinkedIn 
+        // SECTION - LinkedIn
         if ($post->platform == 'linkedin') {
 
             // Set requiremenbts
@@ -999,14 +1036,12 @@ class NotionPosts extends Model
             } else {
 
                 // We have a caption, lets check the character count
-                $character_count = mb_strlen($content, "UTF-8");
+                $character_count = mb_strlen($content, 'UTF-8');
                 if ($character_count > $requirements->caption->max_characters) {
-                    $errors[] = "LinkedIn posts can't be over ".$requirements->caption->max_characters." characters";
+                    $errors[] = "LinkedIn posts can't be over ".$requirements->caption->max_characters.' characters';
                 }
 
             }
-
-
 
             // CASE - Check media
             if (count($media) > 0) {
@@ -1016,8 +1051,8 @@ class NotionPosts extends Model
 
                     // Loop
                     foreach ($media as $m) {
-                        if (!in_array($m['extension'], $requirements->image->extensions)) {
-                            $errors[] = "LinkedIn Carousel posts can only contain images with the following filetypes: " . self::joinRequirements($requirements->image->extensions);
+                        if (! in_array($m['extension'], $requirements->image->extensions)) {
+                            $errors[] = 'LinkedIn Carousel posts can only contain images with the following filetypes: '.self::joinRequirements($requirements->image->extensions);
                             break;
                         }
                     }
@@ -1025,14 +1060,14 @@ class NotionPosts extends Model
                 } elseif (count($media) > 20) {
                     $errors[] = "LinkedIn Carousel posts can't contain more than 20 images";
 
-                // CASE - Has exactly 1 media
+                    // CASE - Has exactly 1 media
                 } else {
 
                     // CASE - Photo
                     if (in_array($media[0]['extension'], $requirements->image->extensions)) {
                         // Do no checks?
 
-                    // CASE - Video
+                        // CASE - Video
                     } elseif (in_array($media[0]['extension'], $requirements->video->extensions)) {
 
                         // Check the video file
@@ -1040,27 +1075,26 @@ class NotionPosts extends Model
 
                         // Check duration
                         if (
-                            $probe['duration'] < $requirements->video->min_duration or 
+                            $probe['duration'] < $requirements->video->min_duration or
                             $probe['duration'] > $requirements->video->max_duration
                         ) {
-                            $errors[] = "LinkedIn video posts have to last between " . $requirements->video->min_duration . ' and ' . $requirements->video->max_duration . ' seconds';
+                            $errors[] = 'LinkedIn video posts have to last between '.$requirements->video->min_duration.' and '.$requirements->video->max_duration.' seconds';
                         }
 
                         // Check size
                         if ($probe['size'] > $requirements->video->max_size) {
-                            $errors[] = "LinkedIn video posts can't weigh more than " . round($requirements->video->max_size / 1024 / 1024) . "MB";
+                            $errors[] = "LinkedIn video posts can't weigh more than ".round($requirements->video->max_size / 1024 / 1024).'MB';
                         }
 
-                    // CASE - Documents
+                        // CASE - Documents
                     } elseif (in_array($media[0]['extension'], $requirements->document->extensions)) {
 
                         // Do no checks? Maybe check the max file size?
 
-
-                    // CASE - Other?
+                        // CASE - Other?
                     } else {
 
-                        $errors[] = "You tried to upload a ." . $media[0]['extension'] . " file. Currenty LinkedIn uploads only support media with the following filetypes: " . self::joinRequirements(
+                        $errors[] = 'You tried to upload a .'.$media[0]['extension'].' file. Currenty LinkedIn uploads only support media with the following filetypes: '.self::joinRequirements(
                             $requirements->image->extensions, $requirements->video->extensions, $requirements->document->extensions
                         );
 
@@ -1092,7 +1126,7 @@ class NotionPosts extends Model
 
                     // CASE - More than 4 files
                     if (count($media) > $requirements->image->max_count) {
-                        $errors[] = "You can't attach more than " . $requirements->image->max_count . " to a single tweet.";
+                        $errors[] = "You can't attach more than ".$requirements->image->max_count.' to a single tweet.';
                     } else {
 
                         // CASE - Single media
@@ -1105,36 +1139,33 @@ class NotionPosts extends Model
                             if (in_array($media[0]['extension'], $requirements->gif->extensions)) {
 
                                 if ($file_size > $requirements->gif->max_size) {
-                                    $errors[] = "GIFs uploaded to Twitter can't weigh more than " . round($requirements->gif->max_size / 1024 / 1024) . "MB";
+                                    $errors[] = "GIFs uploaded to Twitter can't weigh more than ".round($requirements->gif->max_size / 1024 / 1024).'MB';
                                 }
 
-
-                            // CASE - Single image
+                                // CASE - Single image
                             } elseif (in_array($media[0]['extension'], $requirements->image->extensions)) {
 
                                 if ($file_size > $requirements->gif->max_size) {
-                                    $errors[] = "Images uploaded to Twitter can't weigh more than " . round($requirements->image->max_size / 1024 / 1024) . "MB";
+                                    $errors[] = "Images uploaded to Twitter can't weigh more than ".round($requirements->image->max_size / 1024 / 1024).'MB';
                                 }
 
-
-                            // CASE - Single video
+                                // CASE - Single video
                             } elseif (in_array($media[0]['extension'], $requirements->video->extensions)) {
 
-
-                                 // Check the video file
+                                // Check the video file
                                 $probe = self::checkVideoFIle($media[0]['url']);
 
-                                 // Check duration
+                                // Check duration
                                 if (
-                                    $probe['duration'] < $requirements->video->min_duration or 
+                                    $probe['duration'] < $requirements->video->min_duration or
                                     $probe['duration'] > $requirements->video->max_duration
                                 ) {
-                                    $errors[] = "Twitter videos have to last between " . $requirements->video->min_duration . ' and ' . $requirements->video->max_duration . ' seconds';
+                                    $errors[] = 'Twitter videos have to last between '.$requirements->video->min_duration.' and '.$requirements->video->max_duration.' seconds';
                                 }
 
                                 // Check size
                                 if ($probe['size'] > $requirements->video->max_size) {
-                                    $errors[] = "Twitter videos can't weigh more than " . round($requirements->video->max_size / 1024 / 1024) . "MB";
+                                    $errors[] = "Twitter videos can't weigh more than ".round($requirements->video->max_size / 1024 / 1024).'MB';
                                 }
 
                                 // Check dimensions
@@ -1142,32 +1173,29 @@ class NotionPosts extends Model
                                     $probe['height'] > $requirements->video->max_height or
                                     $probe['width'] > $requirements->video->max_width
                                 ) {
-                                    $errors[] = "Twitter only accepts videos with the following resolutions: 1280x720, 720x1280, 720x720";
+                                    $errors[] = 'Twitter only accepts videos with the following resolutions: 1280x720, 720x1280, 720x720';
                                 }
-                            
 
-                            // CASE - Isn't the right extension
+                                // CASE - Isn't the right extension
                             } else {
 
-                                $errors[] = "Twitter only allows you to attach media with the following file types: " . self::joinRequirements(
+                                $errors[] = 'Twitter only allows you to attach media with the following file types: '.self::joinRequirements(
                                     $requirements->image->extensions,
                                     $requirements->video->extensions
                                 );
 
                             }
 
-
-
-                        // CASE - Carousel - 4 media files exactly
+                            // CASE - Carousel - 4 media files exactly
                         } else {
 
                             // Loop through the media
                             foreach ($media as $m) {
 
                                 // Check the file type
-                                if (!in_array($m['extension'], $requirements->image->extensions)) {
+                                if (! in_array($m['extension'], $requirements->image->extensions)) {
 
-                                    $errors[] = "When attaching multiple media to a single tweet, Twitter only accepts the following file types: " . self::joinRequirements(
+                                    $errors[] = 'When attaching multiple media to a single tweet, Twitter only accepts the following file types: '.self::joinRequirements(
                                         $requirements->image->extensions
                                     );
 
@@ -1176,34 +1204,27 @@ class NotionPosts extends Model
                                     // Check
                                     $file_size = self::getContentLength($m['url']);
 
-                                    // Check 
+                                    // Check
                                     if ($file_size > $requirements->image->max_size) {
-                                        $errors[] = "Twitter Media can't weigh more than " . round($requirements->image->max_size / 1024 / 1024) . "MB";
+                                        $errors[] = "Twitter Media can't weigh more than ".round($requirements->image->max_size / 1024 / 1024).'MB';
                                     }
 
                                 }
 
                             }
 
-
-
                         }
-
 
                     }
 
-                    
-
-
-
                 }
-                
+
             }
 
             // CASE - Check tweet length
-            $character_count = mb_strlen($content, "UTF-8");
+            $character_count = mb_strlen($content, 'UTF-8');
             if ($character_count > $requirements->caption->max_characters) {
-                $errors[] = "Twitter posts can't be over ".$requirements->caption->max_characters." characters";
+                $errors[] = "Twitter posts can't be over ".$requirements->caption->max_characters.' characters';
             }
 
         }
@@ -1218,15 +1239,15 @@ class NotionPosts extends Model
             if ($is_content_empty) {
                 $errors[] = "YouTube posts can't have an empty title.";
             } else {
-                $character_count = mb_strlen($content, "UTF-8");
+                $character_count = mb_strlen($content, 'UTF-8');
                 if ($character_count > $requirements->title->max_characters) {
-                    $errors[] = "YouTube video titles can't be over ".$requirements->title->max_characters." characters";
+                    $errors[] = "YouTube video titles can't be over ".$requirements->title->max_characters.' characters';
                 }
             }
 
             // CASE - Has media
             if (count($media) < 0) {
-                $errors[] = "YouTube uploads must have a video file attached.";
+                $errors[] = 'YouTube uploads must have a video file attached.';
             } elseif (count($media) > 1) {
                 $errors[] = "YouTube uploads can't have more than one video file";
             } else {
@@ -1235,8 +1256,8 @@ class NotionPosts extends Model
                 $m = $media[0];
 
                 // Check file type
-                if (!in_array($m['extension'], $requirements->video->extensions)) {
-                    $errors[] =  "YouTube uploads only accept the following file types: " . self::joinRequirements(
+                if (! in_array($m['extension'], $requirements->video->extensions)) {
+                    $errors[] = 'YouTube uploads only accept the following file types: '.self::joinRequirements(
                         $requirements->video->extensions
                     );
                 } else {
@@ -1259,20 +1280,18 @@ class NotionPosts extends Model
             // CASE - Check if content is empty
             if ($is_content_empty) {
                 if (count($media) < 1) {
-                    $errors[] = "Threads posts without images or videos should at least contain text.";
+                    $errors[] = 'Threads posts without images or videos should at least contain text.';
                 }
             } else {
-                $character_count = mb_strlen($content, "UTF-8");
+                $character_count = mb_strlen($content, 'UTF-8');
                 if ($character_count > $requirements->caption->max_characters) {
-                    $errors[] = "Threads can't be longer than ".$requirements->caption->max_characters." characters";
+                    $errors[] = "Threads can't be longer than ".$requirements->caption->max_characters.' characters';
                 }
             }
 
-            
-
             // Check the media count
             if (count($media) > $requirements->carousel->max_media) {
-                $errors[] = "Threads Carousels can't have more than " . $requirements->carousel->max_media . ' items';
+                $errors[] = "Threads Carousels can't have more than ".$requirements->carousel->max_media.' items';
             } else {
 
                 // Loop through all the media
@@ -1284,12 +1303,12 @@ class NotionPosts extends Model
                         // Check
                         $file_size = self::getContentLength($m['url']);
 
-                        // Check 
+                        // Check
                         if ($file_size > $requirements->image->max_size) {
-                            $errors[] = "Threads photos can't weigh more than " . round($requirements->image->max_size / 1024 / 1024) . "MB";
+                            $errors[] = "Threads photos can't weigh more than ".round($requirements->image->max_size / 1024 / 1024).'MB';
                         }
 
-                    // CASE - Video
+                        // CASE - Video
                     } elseif (in_array($m['extension'], $requirements->video->extensions)) {
 
                         // Check the video file
@@ -1297,31 +1316,30 @@ class NotionPosts extends Model
 
                         // Check duration
                         if (
-                            $probe['duration'] < $requirements->video->min_duration or 
+                            $probe['duration'] < $requirements->video->min_duration or
                             $probe['duration'] > $requirements->video->max_duration
                         ) {
-                            $errors[] = "Threads video posts have to last between " . $requirements->video->min_duration . ' and ' . $requirements->video->max_duration . ' seconds';
+                            $errors[] = 'Threads video posts have to last between '.$requirements->video->min_duration.' and '.$requirements->video->max_duration.' seconds';
                         }
 
                         // Check size
                         if ($probe['size'] > $requirements->video->max_size) {
-                            $errors[] = "Threads video posts can't weigh more than " . round($requirements->video->max_size / 1024 / 1024 / 1024) . "GB";
+                            $errors[] = "Threads video posts can't weigh more than ".round($requirements->video->max_size / 1024 / 1024 / 1024).'GB';
                         }
 
                         // Check dimensions
                         if (
-                            // $probe['height'] < $requirements->reel->min_height or 
+                            // $probe['height'] < $requirements->reel->min_height or
                             // $probe['width'] < $requirements->reel->min_width or
-                            $probe['height'] > $requirements->video->max_height // or 
+                            $probe['height'] > $requirements->video->max_height // or
                             // $probe['width'] > $requirements->reel->max_width
                         ) {
-                            $errors[] = "Threads video posts can't be taller than " . $requirements->video->max_height . "px";
+                            $errors[] = "Threads video posts can't be taller than ".$requirements->video->max_height.'px';
                         }
 
-
-                    // CASE - Other
+                        // CASE - Other
                     } else {
-                        $errors[] = "Threads video posts only accept the following file types: " . self::joinRequirements(
+                        $errors[] = 'Threads video posts only accept the following file types: '.self::joinRequirements(
                             $requirements->video->extensions,
                             $requirements->video->extensions
                         );
@@ -1333,7 +1351,6 @@ class NotionPosts extends Model
 
         }
 
-
         // Check
         if (count($errors) > 0) {
             $success = false;
@@ -1342,13 +1359,13 @@ class NotionPosts extends Model
         return [
             'success' => $success,
             'errors' => $errors,
-            'probe' => $probe 
+            'probe' => $probe,
         ];
 
     }
 
-
-    public static function checkPostIsValidBackup($platform, $content = null, $media = null, $thumbnail = null) {
+    public static function checkPostIsValidBackup($platform, $content = null, $media = null, $thumbnail = null)
+    {
 
         // Init
         $success = true;
@@ -1367,11 +1384,11 @@ class NotionPosts extends Model
         // NOTE - Instagram
         if ($platform == 'instagram') {
             if (count($media) < 1) {
-                $errors[] = "You have to have at least one media file in ordrer to upload to Instagram.";
+                $errors[] = 'You have to have at least one media file in ordrer to upload to Instagram.';
             } else {
                 foreach ($media as $m) {
-                    if (!in_array($m['extension'], self::getImageFileTypes()) && !in_array($m['extension'], self::getVideoFileTypes())) {
-                        $errors[] = "Your file " . $m['filename'] . " isn't a valid photo or video format, we won't be able to upload it.";
+                    if (! in_array($m['extension'], self::getImageFileTypes()) && ! in_array($m['extension'], self::getVideoFileTypes())) {
+                        $errors[] = 'Your file '.$m['filename']." isn't a valid photo or video format, we won't be able to upload it.";
                     }
                 }
             }
@@ -1384,8 +1401,8 @@ class NotionPosts extends Model
             }
             if (count($media) > 0) {
                 foreach ($media as $m) {
-                    if (!in_array($m['extension'], self::getImageFileTypes()) && !in_array($m['extension'], self::getVideoFileTypes()) && !in_array($m['extension'], ['pdf'])) {
-                        $errors[] = "Currently only image & video uploads are enabled on LinkedIn.";
+                    if (! in_array($m['extension'], self::getImageFileTypes()) && ! in_array($m['extension'], self::getVideoFileTypes()) && ! in_array($m['extension'], ['pdf'])) {
+                        $errors[] = 'Currently only image & video uploads are enabled on LinkedIn.';
                     }
                 }
             }
@@ -1411,7 +1428,7 @@ class NotionPosts extends Model
         // NOTE - TikTok
         if ($platform == 'tiktok') {
             if (count($media) < 1) {
-                $errors[] = "You have to have at least one media file in ordrer to upload to TikTok.";
+                $errors[] = 'You have to have at least one media file in ordrer to upload to TikTok.';
             } elseif (count($media) > 1) {
                 // Check if ALL of the files are images
                 foreach ($media as $m) {
@@ -1421,21 +1438,21 @@ class NotionPosts extends Model
                     break;
                 }
             } else {
-                if (!in_array($media[0]['extension'], self::getImageFileTypes()) && !in_array($media[0]['extension'], self::getVideoFileTypes())) {
-                    $errors[] = "Your file " . $media[0]['filename'] . " isn't a valid photo or video format, we won't be able to upload it.";
+                if (! in_array($media[0]['extension'], self::getImageFileTypes()) && ! in_array($media[0]['extension'], self::getVideoFileTypes())) {
+                    $errors[] = 'Your file '.$media[0]['filename']." isn't a valid photo or video format, we won't be able to upload it.";
                 } else {
                     $headers = get_headers($media[0]['url'], 1);
                     $content_type = $headers['Content-Type'];
-                    if (!in_array($content_type, ['video/mp4','video/quicktime','video/quicktime'])) {
-                        $errors[] = "Your file " . $media[0]['filename'] . " isn't a valid photo or video format, we won't be able to upload it.";
+                    if (! in_array($content_type, ['video/mp4', 'video/quicktime', 'video/quicktime'])) {
+                        $errors[] = 'Your file '.$media[0]['filename']." isn't a valid photo or video format, we won't be able to upload it.";
                     }
                 }
             }
 
             // Check the thumbnail
             if ($thumbnail) {
-                if (!in_array($thumbnail['extension'], self::getImageFileTypes())) {
-                    $errors[] = "Your TikTok thumbnail has to be an image.";
+                if (! in_array($thumbnail['extension'], self::getImageFileTypes())) {
+                    $errors[] = 'Your TikTok thumbnail has to be an image.';
                 }
             }
         }
@@ -1445,14 +1462,11 @@ class NotionPosts extends Model
             $success = false;
         }
 
-
         return [
             'success' => $success,
             'errors' => $errors,
-            'probe' => []
+            'probe' => [],
         ];
-
-
 
     }
 
@@ -1470,5 +1484,5 @@ class NotionPosts extends Model
     //     'post_date',
     //     'thumbnail',
     // ];
-    
+
 }

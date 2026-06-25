@@ -1,2 +1,5 @@
 User-agent: *
-Disallow:
+Allow: /
+Disallow: /urls.txt
+
+Sitemap: https://notionscheduler.app/sitemap.xml

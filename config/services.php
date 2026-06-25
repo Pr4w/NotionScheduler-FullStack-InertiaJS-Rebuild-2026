@@ -179,4 +179,11 @@ return [
         ],
     ],
 
+    // Same-origin now: OAuth callbacks redirect back into the app (/app/...).
+    // Old code used services.frontend.url as the redirect base; keep it pointing
+    // at this app's own URL.
+    'frontend' => [
+        'url' => env('FRONTEND_URL', env('APP_URL')),
+    ],
+
 ];
