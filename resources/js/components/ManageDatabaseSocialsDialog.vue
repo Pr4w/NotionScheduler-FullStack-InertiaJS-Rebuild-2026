@@ -37,14 +37,24 @@ const selected = ref<number[]>([]);
 const cap = (s: string): string =>
     s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 
-// Order accounts by platform, then name (the prop order is unsorted).
-const sortedSocials = computed(() =>
-    [...props.socials].sort(
+// Group accounts by platform (each group's accounts sorted by name) so the
+// dialog can show a small platform header before each block.
+const groupedSocials = computed(() => {
+    const sorted = [...props.socials].sort(
         (a, b) =>
             a.platform.localeCompare(b.platform) ||
             (a.name ?? '').localeCompare(b.name ?? ''),
-    ),
-);
+    );
+    const groups = new Map<string, SocialAccount[]>();
+    for (const s of sorted) {
+        if (!groups.has(s.platform)) groups.set(s.platform, []);
+        groups.get(s.platform)!.push(s);
+    }
+    return [...groups.entries()].map(([platform, accounts]) => ({
+        platform,
+        accounts,
+    }));
+});
 
 watch(open, (isOpen) => {
     if (isOpen) {
@@ -99,47 +109,60 @@ function doSave() {
                 >
             </DialogHeader>
 
-            <div class="max-h-[60vh] space-y-1 overflow-y-auto py-2">
+            <div class="max-h-[60vh] space-y-3 overflow-y-auto py-2">
                 <p v-if="!socials.length" class="text-sm text-muted-foreground">
                     You have no connected social accounts yet.
                 </p>
-                <label
-                    v-for="s in sortedSocials"
-                    :key="s.id"
-                    class="flex cursor-pointer items-center gap-3 rounded-md p-2 hover:bg-muted/50"
+                <div
+                    v-for="group in groupedSocials"
+                    :key="group.platform"
+                    class="space-y-1"
                 >
-                    <input
-                        type="checkbox"
-                        :checked="selected.includes(s.id)"
-                        class="accent-primary"
-                        @change="toggle(s.id)"
-                    />
-                    <div class="relative shrink-0">
-                        <img
-                            v-if="s.profile_picture"
-                            :src="s.profile_picture"
-                            alt=""
-                            class="h-8 w-8 rounded-full object-cover"
+                    <div
+                        class="flex items-center gap-1.5 px-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                    >
+                        <SocialIcon
+                            :platform="group.platform"
+                            class="h-3.5 w-3.5"
                         />
-                        <div v-else class="h-8 w-8 rounded-full bg-muted"></div>
-                        <span
-                            class="absolute -right-0.5 -bottom-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-background ring-1 ring-border"
-                        >
-                            <SocialIcon
-                                :platform="s.platform"
-                                class="h-2.5 w-2.5"
+                        {{ cap(group.platform) }}
+                    </div>
+                    <label
+                        v-for="s in group.accounts"
+                        :key="s.id"
+                        class="flex cursor-pointer items-center gap-3 rounded-md p-2 hover:bg-muted/50"
+                    >
+                        <input
+                            type="checkbox"
+                            :checked="selected.includes(s.id)"
+                            class="accent-primary"
+                            @change="toggle(s.id)"
+                        />
+                        <div class="relative shrink-0">
+                            <img
+                                v-if="s.profile_picture"
+                                :src="s.profile_picture"
+                                alt=""
+                                class="h-8 w-8 rounded-full object-cover"
                             />
-                        </span>
-                    </div>
-                    <div class="min-w-0">
-                        <div class="truncate font-medium">
+                            <div
+                                v-else
+                                class="h-8 w-8 rounded-full bg-muted"
+                            ></div>
+                            <span
+                                class="absolute -right-0.5 -bottom-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-background ring-1 ring-border"
+                            >
+                                <SocialIcon
+                                    :platform="s.platform"
+                                    class="h-2.5 w-2.5"
+                                />
+                            </span>
+                        </div>
+                        <span class="min-w-0 truncate font-medium">
                             {{ s.name ?? cap(s.platform) }}
-                        </div>
-                        <div class="text-xs text-muted-foreground">
-                            {{ cap(s.platform) }}
-                        </div>
-                    </div>
-                </label>
+                        </span>
+                    </label>
+                </div>
             </div>
 
             <DialogFooter>

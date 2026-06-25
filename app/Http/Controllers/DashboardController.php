@@ -43,7 +43,10 @@ class DashboardController extends Controller
     {
         $userId = Auth::id();
 
-        $databases = NotionDatabases::with('socials')
+        // Only eager-load ACTIVE linked accounts — the socials() relation isn't
+        // scoped, so without this a removed (is_active=0) account would linger
+        // in the Databases tab even though it's gone from the Social tab.
+        $databases = NotionDatabases::with(['socials' => fn ($query) => $query->where('is_active', 1)])
             ->where('userid', $userId)
             ->where('is_active', 1)
             ->get();
