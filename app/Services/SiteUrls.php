@@ -99,6 +99,16 @@ class SiteUrls
             ];
         }
 
+        // Legal pages — rarely change, low priority
+        foreach (['privacy', 'terms'] as $legal) {
+            $urls[] = [
+                'loc' => route($legal),
+                'priority' => 0.3,
+                'frequency' => Url::CHANGE_FREQUENCY_YEARLY,
+                'lastmod' => $staticLastmod,
+            ];
+        }
+
         return $urls;
     }
 

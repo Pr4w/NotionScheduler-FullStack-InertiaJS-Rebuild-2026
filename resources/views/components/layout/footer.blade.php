@@ -25,8 +25,8 @@
     ];
 
     $company = [
-        ['https://app.notionscheduler.app/privacy', 'Privacy policy'],
-        ['https://app.notionscheduler.app/terms',   'Terms of service'],
+        [route('privacy'), 'Privacy policy'],
+        [route('terms'),   'Terms of service'],
     ];
 @endphp
 

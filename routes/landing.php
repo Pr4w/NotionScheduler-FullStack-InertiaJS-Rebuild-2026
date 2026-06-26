@@ -89,6 +89,25 @@ Route::get('/socialmedia', [SocialMediaHubController::class, 'show'])->name('soc
 Route::get('/blog', [BlogController::class, 'index'])->name('blog.index');
 Route::get('/blog/{blogPost}', [BlogController::class, 'show'])->name('blog.show');
 
+// Legal pages — content ported 1:1 from the legacy app.
+Route::get('/privacy', function () {
+    return view('pages.privacy', [
+        'SEOData' => new SEOData(
+            title: 'Privacy Policy',
+            description: 'How NotionScheduler collects, uses and protects your information.',
+        ),
+    ]);
+})->name('privacy');
+
+Route::get('/terms', function () {
+    return view('pages.terms', [
+        'SEOData' => new SEOData(
+            title: 'Terms of Service',
+            description: 'The terms and conditions for using NotionScheduler.',
+        ),
+    ]);
+})->name('terms');
+
 // Catch-alls last, constrained to known config slugs.
 Route::get('/{platform}', [SolutionController::class, 'show'])
     ->where('platform', implode('|', array_keys(config('solutions'))))
