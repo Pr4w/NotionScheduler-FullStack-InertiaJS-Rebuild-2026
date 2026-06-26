@@ -100,7 +100,9 @@ onMounted(() => {
     const status = params.get('oauth_status');
 
     if (status) {
-        const platform = params.get('oauth_platform') ?? '';
+        // The callback reports a display-cased platform (e.g. "Notion"), so
+        // normalise before matching.
+        const platform = (params.get('oauth_platform') ?? '').toLowerCase();
         if (status === 'success') {
             if (platform === 'notion') {
                 hasNotion.value = true;
