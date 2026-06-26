@@ -15,6 +15,7 @@ interface SocialAccount {
     platform: string;
     name: string | null;
     profile_picture: string | null;
+    is_valid: number | boolean;
 }
 
 interface NotionDatabase {
@@ -34,6 +35,15 @@ const props = defineProps<{
 
 const cap = (s: string): string =>
     s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+const truthy = (v: number | boolean | null | undefined): boolean =>
+    v === 1 || v === true;
+
+// Accounts can be connected (is_active) but have an invalid/expired token
+// (is_valid = 0) — same red-dot state the dashboard shows. Surface it here so
+// the wizard doesn't present a broken account as a healthy connection.
+const hasInvalidSocials = computed(() =>
+    props.socials.some((s) => !truthy(s.is_valid)),
+);
 
 // Group connected accounts by platform so the wizard can show what's linked,
 // stacked per network, instead of just a count.
@@ -275,6 +285,19 @@ onMounted(() => {
                                             class="h-3 w-3"
                                         />
                                     </span>
+                                    <span
+                                        class="absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-background"
+                                        :class="
+                                            truthy(s.is_valid)
+                                                ? 'bg-green-500'
+                                                : 'bg-red-500'
+                                        "
+                                        :title="
+                                            truthy(s.is_valid)
+                                                ? 'Connected'
+                                                : 'Needs reconnecting'
+                                        "
+                                    ></span>
                                 </span>
                                 <span
                                     class="max-w-[10rem] truncate font-medium"
@@ -283,6 +306,15 @@ onMounted(() => {
                             </span>
                         </div>
                     </div>
+
+                    <p
+                        v-if="hasInvalidSocials"
+                        class="text-xs text-red-600 dark:text-red-400"
+                    >
+                        Accounts with a red dot have an expired or invalid
+                        connection — reconnect them from the dashboard so they
+                        can publish.
+                    </p>
                 </div>
             </div>
 
