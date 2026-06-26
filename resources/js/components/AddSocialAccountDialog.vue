@@ -10,7 +10,7 @@ import {
     DialogTrigger,
 } from '@/components/ui/dialog';
 import { Spinner } from '@/components/ui/spinner';
-import { Plus } from '@lucide/vue';
+import { ChevronDown, Info, Plus } from '@lucide/vue';
 import SocialIcon from '@/components/SocialIcon.vue';
 import { useOAuthConnect } from '@/composables/useOAuthConnect';
 
@@ -67,6 +67,45 @@ const platforms: { slug: string; icon: string; label: string }[] = [
                     {{ p.label }}
                 </button>
             </div>
+
+            <!-- Meta only shares the pages/accounts you tick during OAuth, so
+                 extra Facebook/Instagram accounts need re-authorizing in their
+                 Business Integrations settings before they show up here. -->
+            <details class="group rounded-lg border border-border bg-muted/30">
+                <summary
+                    class="flex cursor-pointer list-none items-center gap-2 p-3 text-sm font-medium select-none [&::-webkit-details-marker]:hidden"
+                >
+                    <Info class="h-4 w-4 shrink-0 text-muted-foreground" />
+                    <span class="flex-1"
+                        >Not all your Facebook / Instagram accounts showing
+                        up?</span
+                    >
+                    <ChevronDown
+                        class="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
+                    />
+                </summary>
+                <div class="px-3 pb-3 text-sm text-muted-foreground">
+                    Head to
+                    <a
+                        href="https://www.facebook.com/settings/?tab=business_tools"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="font-medium text-primary hover:underline"
+                        >your Facebook business integrations</a
+                    >, find
+                    <span class="font-medium text-foreground"
+                        >NotionScheduler</span
+                    >
+                    and hit
+                    <span class="font-medium text-foreground">Edit</span>, then
+                    add the pages and accounts you want it to manage. Once
+                    saved, click
+                    <span class="font-medium text-foreground"
+                        >Facebook &amp; Instagram</span
+                    >
+                    above again and they'll come through.
+                </div>
+            </details>
         </DialogContent>
     </Dialog>
 </template>
