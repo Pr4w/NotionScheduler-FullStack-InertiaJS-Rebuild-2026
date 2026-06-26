@@ -95,7 +95,13 @@ Route::get('setup', [SetupController::class, 'index'])->name('setup');
 Route::get('affiliates', [AffiliateController::class, 'index'])->name('affiliates');
 
 // --- Admin debug utilities (admin only) ---
+// Ported from the legacy /admin/* routes; relocated under /app/admin because
+// Filament now owns /admin. The legacy stats/supervisor endpoints were public;
+// they're admin-gated here since nothing public consumes them anymore.
 Route::middleware(IsAdmin::class)->prefix('admin')->group(function () {
+    Route::get('usercount', [AdminController::class, 'getUserCount']);
+    Route::get('frontEndStats', [AdminController::class, 'returnStatsForFrontend']);
+    Route::get('notifySupervisorRestart', [AdminController::class, 'notifySupervisorRestart']);
     Route::get('facebookDebugToken/{token?}', [AdminController::class, 'facebookDebugToken']);
     Route::get('debugPost/{postid?}', [AdminController::class, 'debugPost']);
     Route::get('debugDatabase/{databaseid?}', [AdminController::class, 'debugDatabase']);

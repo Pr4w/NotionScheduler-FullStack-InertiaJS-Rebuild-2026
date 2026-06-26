@@ -4,34 +4,34 @@
 
 namespace App\Services;
 
+use App\Models\NotionPosts;
+use App\Models\User;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Http;
 
 class FrontEndStats
 {
+    /**
+     * Headline numbers for the landing's social-proof card.
+     *
+     * The API and the landing now share one database, so this reads the counts
+     * directly instead of calling the old external /admin/frontEndStats endpoint
+     * over HTTP (no network hop, no down-API fallback needed).
+     *
+     * The +1000 / +4000 offsets are the long-standing vanity baseline carried
+     * over from the legacy service so the displayed figures stay continuous —
+     * tweak or drop them here if you want to show the true counts.
+     *
+     * Uses its own cache key: AdminController::returnStatsForFrontend() caches
+     * the RAW counts under 'frontend_stats', so this padded variant must not
+     * share that key.
+     */
     public function get(): array
     {
-        return Cache::remember('frontend_stats', now()->addHour(), function () {
-            try {
-                $response = Http::timeout(5)->get('https://api.notionscheduler.app/admin/frontEndStats');
-
-                if ($response->successful()) {
-                    $data = $response->json();
-
-                    return [
-                        'users' => (int) ($data['users'] + 1000 ?? 0),
-                        'published_posts' => (int) ($data['published_posts'] + 4000 ?? 0),
-                    ];
-                }
-            } catch (\Throwable $e) {
-                report($e);
-            }
-
-            // Fallback if the API is down/slow — cached zeros for a SHORT
-            // time so we retry soon rather than showing 0 for an hour.
-            Cache::put('frontend_stats', ['users' => 0, 'published_posts' => 0], now()->addMinutes(2));
-
-            return ['users' => 0, 'published_posts' => 0];
+        return Cache::remember('landing_social_proof_stats', now()->addHour(), function () {
+            return [
+                'users' => User::count() + 1000,
+                'published_posts' => NotionPosts::where('status', 'posted')->count() + 4000,
+            ];
         });
     }
 }
