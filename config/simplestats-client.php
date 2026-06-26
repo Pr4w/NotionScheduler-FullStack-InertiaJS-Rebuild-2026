@@ -1,0 +1,195 @@
+<?php
+
+use App\Models\User;
+use Illuminate\Auth\Events\Login;
+
+return [
+
+    /*
+     |--------------------------------------------------------------------------
+     | SimpleStats Settings
+     |--------------------------------------------------------------------------
+     |
+     | SimpleStats is enabled by default. Disabling it will stop tracking your stats.
+     |
+     | You can provide an array of URI's that must be ignored (eg. 'api/*')
+     */
+
+    'enabled' => env('SIMPLESTATS_ENABLED', true),
+
+    'except' => [
+        'telescope*',
+        'horizon*',
+        'pulse*',
+        'admin*',
+    ],
+
+    /*
+     |--------------------------------------------------------------------------
+     | SimpleStats Blocked IPs
+     |--------------------------------------------------------------------------
+     |
+     | Define IP addresses or CIDR ranges that should be excluded from tracking.
+     | Supports single IPs (e.g. '192.168.1.1') and CIDR notation (e.g. '10.0.0.0/8').
+     |
+     */
+
+    'blocked_ips' => [
+        // '192.168.1.1',
+        // '10.0.0.0/8',
+        // '172.16.0.0/12',
+    ],
+
+    /*
+     |--------------------------------------------------------------------------
+     | SimpleStats API Credentials
+     |--------------------------------------------------------------------------
+     |
+     | Define your API credentials here. If you are not told to change the API URL,
+     | just keep the default. It's important to set an API token! You'll receive
+     | one, after creating your team and project on https://simplestats.io
+     |
+     */
+
+    'api_url' => env('SIMPLESTATS_API_URL', 'https://simplestats.io/api/v1/'),
+
+    'api_token' => env('SIMPLESTATS_API_TOKEN'),
+
+    /*
+     |--------------------------------------------------------------------------
+     | SimpleStats Queue
+     |--------------------------------------------------------------------------
+     |
+     | To avoid the tracking API calls block the whole request and for fault tolerance,
+     | we highly recommend using Laravel's built-in queue-system. Here you can define
+     | to which queue the tracking API calls should be dispatched and handled by.
+     |
+     */
+
+    'queue' => env('SIMPLESTATS_QUEUE', 'default'),
+
+    /*
+     |--------------------------------------------------------------------------
+     | SimpleStats Log Errors
+     |--------------------------------------------------------------------------
+     |
+     | When enabled, the client will log API error responses (4xx, 5xx) to your
+     | application log on every failed attempt. Transient errors like connection
+     | timeouts are only logged on the final retry attempt.
+     |
+     */
+
+    'log_errors' => env('SIMPLESTATS_LOG_ERRORS', false),
+
+    /*
+     |--------------------------------------------------------------------------
+     | SimpleStats Middleware Groups
+     |--------------------------------------------------------------------------
+     |
+     | Which middleware group(s) the CheckTracking middleware is appended to.
+     | Pick what matches your setup:
+     |
+     | - ['web']         : classic server-rendered apps (Blade, Inertia, Livewire)
+     | - ['api']         : headless / SPA frontends that only ever hit your API
+     | - ['web', 'api']  : hybrid setups (e.g. Blade marketing + SPA dashboard)
+     |
+     */
+
+    'middleware_groups' => ['web'],
+
+    /*
+     |--------------------------------------------------------------------------
+     | SimpleStats Tracking Storage
+     |--------------------------------------------------------------------------
+     |
+     | Where to persist a visitor's attribution (UTMs, referer, entry page) so
+     | it survives across requests in the same day.
+     |
+     | - 'session' (default): stores the data in the user's session. Requires a
+     |   session cookie and works only in classic, session-bound Laravel apps.
+     |   Survives mobile IP changes because the cookie identifies the user.
+     |
+     | - 'cache': stores the data in Laravel's cache keyed by a daily hash of
+     |   IP + User-Agent. Works in stateless / headless setups (JWT, SPA on a
+     |   separate domain) where no session cookie is available. Loses precision
+     |   when the visitor's IP changes (mobile network switches), which is the
+     |   same trade-off privacy-first tools like Plausible and Fathom make to
+     |   stay cookie- and consent-free.
+     |
+     */
+
+    'tracking_storage' => 'session',
+
+    /*
+     |--------------------------------------------------------------------------
+     | SimpleStats Tracking Codes
+     |--------------------------------------------------------------------------
+     |
+     | Below you can set your tracking code URL param names. We already set some
+     | classical defaults for you, but you're free to change them as you like.
+     | Note that only the params which are listed here are getting tracked!
+     |
+     */
+
+    'tracking_codes' => [
+        'source' => ['utm_source', 'ref'],
+        'medium' => ['utm_medium', 'adGroup', 'adGroupId'],
+        'campaign' => ['utm_campaign'],
+        'term' => ['utm_term'],
+        'content' => ['utm_content'],
+    ],
+
+    /*
+     |--------------------------------------------------------------------------
+     | SimpleStats Tracking Types
+     |--------------------------------------------------------------------------
+     |
+     | Here you can set three different tracking types. The first is the login
+     | event. If this event gets dispatched, we track a login. The second is
+     | the user model. If such a model is created, we track a registration.
+     |
+     | As the payment model is named very individually, we did not set any default here.
+     | Give it the name of the model which holds your payments or transactions data.
+     |
+     | See: https://simplestats.io/docs
+     |
+     */
+
+    'tracking_types' => [
+        'login' => [
+            'event' => Login::class,
+        ],
+
+        // Make sure this model implements the TrackablePerson or
+        // the TrackablePersonWithCondition Contract
+        'user' => [
+            'model' => User::class,
+        ],
+
+        // Make sure this model implements the TrackablePayment or
+        // the TrackablePaymentWithCondition contract
+        'payment' => [
+            'model' => null,
+        ],
+    ],
+
+    /*
+     |--------------------------------------------------------------------------
+     | SimpleStats Custom Properties Resolvers
+     |--------------------------------------------------------------------------
+     |
+     | Optionally set classes that resolve custom properties whenever a user
+     | or a visitor is tracked (e.g. a subscription plan or an A/B test
+     | variant). The resolved properties are sent along with the track itself.
+     |
+     | The user resolver must implement the ResolvesUserCustomProperties
+     | contract, the visitor resolver the ResolvesVisitorCustomProperties
+     | contract.
+     |
+     */
+
+    'custom_properties_resolvers' => [
+        'user' => null,
+        'visitor' => null,
+    ],
+];

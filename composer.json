@@ -31,6 +31,7 @@
         "ralphjsmit/laravel-filament-seo": "^2.2",
         "ralphjsmit/laravel-seo": "^1.8",
         "shweshi/opengraph": "^1.2",
+        "simplestats-io/laravel-client": "^4.1",
         "socialiteproviders/facebook": "^4.1",
         "socialiteproviders/instagram": "^5.2",
         "socialiteproviders/linkedin": "^5.0",

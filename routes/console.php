@@ -36,5 +36,11 @@ Schedule::command('telescope:prune --hours=48')->dailyAt('03:00');
 Schedule::command('backup:run')->daily()->at('03:10');
 Schedule::command('backup:clean')->daily()->at('03:40');
 
+// Weekly SEO housekeeping (Sundays): refresh the sitemap, then re-submit the
+// full URL set to IndexNow. (--no-interaction skips the --all confirm prompt;
+// incremental IndexNow pings already fire on blog-post publish.)
+Schedule::command('sitemap:generate')->weeklyOn(0, '04:00');
+Schedule::command('indexnow:submit --all --no-interaction')->weeklyOn(0, '04:10');
+
 // Still deferred (deployment-specific):
 //   - app:check-supervisor -> needs the Forge/supervisor process setup
