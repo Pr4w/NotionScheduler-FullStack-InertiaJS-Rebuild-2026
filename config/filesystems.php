@@ -60,6 +60,12 @@ return [
             'report' => false,
         ],
 
+        'storagebox' => [
+            'driver' => 'local',
+            'root' => '/mnt/storagebox/laravel-backups',
+            'throw' => true,
+        ],
+
     ],
 
     /*

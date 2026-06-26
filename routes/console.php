@@ -28,8 +28,13 @@ Schedule::command('app:set-default-scaffolding')->daily();
 Schedule::command('app:trial-expired')->daily();
 Schedule::command('app:send-telemetry')->daily();
 
-// Deferred until their dependencies are wired:
-//   - metrics:scrape       -> needs pr4w/laravel-social-metrics (Phase 1 follow-up)
-//   - telescope:prune      -> Telescope is a deferred monitoring tool (Phase 7)
-//   - backup:run / :clean  -> needs config/backup.php published (Phase 7)
-//   - app:check-supervisor -> deployment-specific (Phase 7)
+// Post-publish social metrics (views/likes/etc.) — pr4w/laravel-social-metrics.
+Schedule::command('metrics:scrape')->everyMinute()->withoutOverlapping();
+
+// 3am maintenance slot: prune Telescope, then back up the DB + files.
+Schedule::command('telescope:prune --hours=48')->dailyAt('03:00');
+Schedule::command('backup:run')->daily()->at('03:10');
+Schedule::command('backup:clean')->daily()->at('03:40');
+
+// Still deferred (deployment-specific):
+//   - app:check-supervisor -> needs the Forge/supervisor process setup

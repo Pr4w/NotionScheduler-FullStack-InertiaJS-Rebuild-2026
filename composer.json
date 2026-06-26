@@ -21,10 +21,12 @@
         "laravel/fortify": "^1.37.2",
         "laravel/framework": "^13.7",
         "laravel/socialite": "^5.28",
+        "laravel/telescope": "^5.20",
         "laravel/tinker": "^3.0",
         "laravel/wayfinder": "^0.1.14",
         "mariosimao/notion-sdk-php": "^1.17",
         "php-ffmpeg/php-ffmpeg": "^1.4",
+        "pr4w/laravel-social-metrics": "dev-main",
         "ralphjsmit/laravel-filament-seo": "^2.2",
         "ralphjsmit/laravel-seo": "^1.8",
         "shweshi/opengraph": "^1.2",
@@ -138,5 +140,19 @@
         }
     },
     "minimum-stability": "stable",
-    "prefer-stable": true
+    "prefer-stable": true,
+    "repositories": [
+        {
+            "type": "vcs",
+            "url": "https://github.com/Pr4w/Laravel-Social-Poster"
+        },
+        {
+            "type": "vcs",
+            "url": "https://github.com/Pr4w/Laravel-Social-Tokens"
+        },
+        {
+            "type": "vcs",
+            "url": "https://github.com/Pr4w/Laravel-Social-Metrics"
+        }
+    ]
 }
