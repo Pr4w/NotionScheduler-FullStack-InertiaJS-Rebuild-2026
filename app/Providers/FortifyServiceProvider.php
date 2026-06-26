@@ -11,6 +11,7 @@ use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 use Inertia\Inertia;
+use Laravel\Fortify\Contracts\LogoutResponse as LogoutResponseContract;
 use Laravel\Fortify\Features;
 use Laravel\Fortify\Fortify;
 
@@ -21,7 +22,17 @@ class FortifyServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Fortify's default logout redirects to "/" (the Blade landing page),
+        // which Inertia receives as a non-Inertia response and renders inside a
+        // modal/iframe. Send logged-out users to the Inertia login page instead
+        // so it's a clean SPA redirect.
+        $this->app->instance(LogoutResponseContract::class, new class implements LogoutResponseContract
+        {
+            public function toResponse($request)
+            {
+                return redirect()->route('login');
+            }
+        });
     }
 
     /**

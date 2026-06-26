@@ -8,8 +8,9 @@ use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Keeps users who haven't finished onboarding on the setup wizard. Only the
- * main app *pages* are gated (by route name) — the wizard's own action
- * endpoints (connect, scan, finishedWizard, etc.) pass through untouched.
+ * Dashboard is gated — Pricing, Affiliates and Support stay reachable during
+ * onboarding so the user can look around before committing. The wizard's own
+ * action endpoints (connect, scan, finishedWizard, etc.) pass through untouched.
  */
 class EnsureWizardCompleted
 {
@@ -19,7 +20,7 @@ class EnsureWizardCompleted
 
         if ($user
             && ! $user->completed_wizard
-            && $request->routeIs('dashboard', 'pricing', 'affiliates', 'support')) {
+            && $request->routeIs('dashboard')) {
             return redirect()->route('setup');
         }
 

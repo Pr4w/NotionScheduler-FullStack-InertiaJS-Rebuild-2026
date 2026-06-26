@@ -70,8 +70,6 @@ const stepTitles = [
 const step = ref(0);
 
 const hasNotion = ref(props.hasNotionToken);
-const dbCount = ref(props.databasesCount);
-const socialCount = ref(props.socialsCount);
 
 const { connect, connecting } = useOAuthConnect();
 
@@ -83,7 +81,9 @@ function back() {
 }
 
 function onDatabaseConnected() {
-    dbCount.value++;
+    // The dialog connects over XHR (no full page load), so pull fresh props to
+    // keep the connected-databases list and its count accurate.
+    router.reload({ only: ['databases', 'databasesCount'] });
     toast.success('Database connected.');
 }
 
@@ -107,7 +107,6 @@ onMounted(() => {
                 step.value = 2;
                 toast.success('Notion connected.');
             } else {
-                socialCount.value++;
                 step.value = 3;
                 toast.success('Account connected.');
             }
@@ -199,7 +198,7 @@ onMounted(() => {
                 <p class="text-sm text-muted-foreground">
                     Choose a database from your workspace to schedule posts
                     from. You currently have
-                    <strong>{{ dbCount }}</strong> connected.
+                    <strong>{{ databases.length }}</strong> connected.
                 </p>
                 <AddDatabaseDialog @connected="onDatabaseConnected" />
 
@@ -227,7 +226,7 @@ onMounted(() => {
                 </h2>
                 <p class="text-sm text-muted-foreground">
                     Link the accounts you want to publish to. You currently have
-                    <strong>{{ socialCount }}</strong> connected.
+                    <strong>{{ socials.length }}</strong> connected.
                 </p>
                 <AddSocialAccountDialog return-to="setup" />
 
