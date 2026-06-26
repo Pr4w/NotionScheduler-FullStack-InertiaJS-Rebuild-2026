@@ -5,6 +5,7 @@ import AuthLayout from '@/layouts/AuthLayout.vue';
 import SettingsLayout from '@/layouts/settings/Layout.vue';
 import { initializeFlashToast } from '@/lib/flashToast';
 import { initializeHttpErrorToast } from '@/lib/httpErrorToast';
+import { initializeSentry } from '@/lib/sentry';
 
 const appName = import.meta.env.VITE_APP_NAME || 'Laravel';
 
@@ -24,6 +25,11 @@ createInertiaApp({
     },
     progress: {
         color: '#4B5563',
+    },
+    // Inertia v3 auto-mode hook: receives the Vue app instance before mount,
+    // so Sentry can capture Vue component errors as well as uncaught/global ones.
+    withApp(app) {
+        initializeSentry(app);
     },
 });
 
