@@ -25,6 +25,7 @@
         "laravel/tinker": "^3.0",
         "laravel/wayfinder": "^0.1.14",
         "mariosimao/notion-sdk-php": "^1.17",
+        "opcodesio/log-viewer": "^3.24",
         "php-ffmpeg/php-ffmpeg": "^1.4",
         "pr4w/laravel-social-metrics": "dev-main",
         "ralphjsmit/laravel-filament-seo": "^2.2",

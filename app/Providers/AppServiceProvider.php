@@ -13,6 +13,9 @@ use Laravel\Cashier\Cashier;
 use SocialiteProviders\Instagram\Provider;
 use SocialiteProviders\Manager\SocialiteWasCalled;
 
+use Illuminate\Support\Facades\Gate;
+use Opcodes\LogViewer\Facades\LogViewer;
+
 class AppServiceProvider extends ServiceProvider
 {
     /**
@@ -36,6 +39,20 @@ class AppServiceProvider extends ServiceProvider
 
         // Automatic collection of VAT on payments.
         Cashier::calculateTaxes();
+
+        Gate::define('viewTelescope', function (User $user) {
+            if (!$request->user()) {
+                return false;
+            }
+            return $request->user()->isAdmin();
+        });
+
+        LogViewer::auth(function ($request) {
+            if (!$request->user()) {
+                return false;
+            }
+            return $request->user()->isAdmin();
+        });
     }
 
     /**
