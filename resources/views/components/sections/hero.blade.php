@@ -12,10 +12,7 @@
             </div>
 
             <h1 class="reveal reveal-2 mt-6 text-5xl font-extrabold sm:text-6xl xl:text-7xl">
-                Schedule everything.
-                <span class="relative inline-block">
-                    <span class="relative z-10">Leave Notion never.</span>
-                </span>
+                The social media scheduler that runs on Notion<
             </h1>
 
             <p class="reveal reveal-3 text-ink-soft mt-6 text-lg sm:text-xl">Write your captions, drop your images, pick a date — all in the Notion workspace you already obsess over. We'll post it to every platform for you.</p>

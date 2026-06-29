@@ -1785,8 +1785,8 @@ class UploadMedia implements ShouldQueue, ShouldBeUnique
                             return;
                         } else {
 
-                            // Check if we have a response header?
-                            $foreign_id = $response->header('x-linkedin-id');
+                            // Resolve the created post URN (prefers x-restli-id).
+                            $foreign_id = $this->linkedinPostId($response);
 
                             // All is good in the world
                             UpdateNotionPostInDatabaseAfterUpload::dispatch(
@@ -1971,8 +1971,8 @@ class UploadMedia implements ShouldQueue, ShouldBeUnique
                                         return;
                                     } else {
 
-                                        // Check if we have a response header?
-                                        $foreign_id = $response->header('x-linkedin-id');
+                                        // Resolve the created post URN (prefers x-restli-id).
+                                        $foreign_id = $this->linkedinPostId($response);
 
                                         // All is good in the world
                                         UpdateNotionPostInDatabaseAfterUpload::dispatch(
@@ -2091,11 +2091,8 @@ class UploadMedia implements ShouldQueue, ShouldBeUnique
                                     return;
                                 } else {
 
-                                    // Check if we have a response header?
-                                    $foreign_id = $response->header('x-linkedin-id');
-                                    if ($response->hasHeader('x-restli-id')) {
-                                        $foreign_id = $response->header('x-restli-id');
-                                    }
+                                    // Resolve the created post URN (prefers x-restli-id).
+                                    $foreign_id = $this->linkedinPostId($response);
 
                                     // All is good in the world
                                     UpdateNotionPostInDatabaseAfterUpload::dispatch(
@@ -2244,8 +2241,8 @@ class UploadMedia implements ShouldQueue, ShouldBeUnique
                     return;
                 } else {
 
-                    // Check if we have a response header?
-                    $foreign_id = $response->header('x-linkedin-id');
+                    // Resolve the created post URN (prefers x-restli-id).
+                    $foreign_id = $this->linkedinPostId($response);
 
                     // All is good in the world
                     UpdateNotionPostInDatabaseAfterUpload::dispatch(
@@ -2556,6 +2553,27 @@ class UploadMedia implements ShouldQueue, ShouldBeUnique
             }
 
         }
+
+    }
+
+    /**
+     * Extract the created post's URN from a LinkedIn create-post response.
+     *
+     * The REST.li posts API (LinkedIn-Version 202604) returns the new entity's
+     * URN in the `x-restli-id` header; some responses use `x-linkedin-id`
+     * instead. We prefer x-restli-id and fall back to x-linkedin-id. Returns
+     * null when neither is present, so a missing header never gets persisted as
+     * an empty posted_foreign_id (Response::header() yields '' for absent
+     * headers).
+     */
+    private function linkedinPostId($response): ?string {
+
+        $id = $response->header('x-restli-id');
+        if (blank($id)) {
+            $id = $response->header('x-linkedin-id');
+        }
+
+        return blank($id) ? null : $id;
 
     }
 

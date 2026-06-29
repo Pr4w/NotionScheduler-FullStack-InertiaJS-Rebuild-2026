@@ -65,7 +65,14 @@ class UpdateNotionPostInDatabaseAfterUpload implements ShouldQueue
             $key = 'posted';
             $this->post->status = 'posted';
             $this->post->posted_date = Carbon::now();
-            $this->post->posted_foreign_id = $this->foreign_id;
+            // Never overwrite a previously-stored id with a blank one. A missing
+            // upstream id (e.g. an absent LinkedIn response header) would otherwise
+            // wipe posted_foreign_id and silently break metrics/webhook matching.
+            if (filled($this->foreign_id)) {
+                $this->post->posted_foreign_id = $this->foreign_id;
+            } else {
+                Log::warning("Post #" . $this->post->id . " (" . $this->post->platform . ") submitted but returned no foreign id; leaving posted_foreign_id unchanged.");
+            }
             Log::info("Successfully submitted post with ID #" . $this->post->id);
         } else {
             $this->post->status = 'error';
