@@ -28,7 +28,7 @@ const { connect, connecting } = useOAuthConnect();
 const platforms: { slug: string; icon: string; label: string }[] = [
     { slug: 'facebook', icon: 'facebook', label: 'Facebook & Instagram' },
     { slug: 'linkedin-pro', icon: 'linkedin', label: 'LinkedIn' },
-    { slug: 'twitter', icon: 'twitter', label: 'X (Twitter)' },
+    // { slug: 'twitter', icon: 'twitter', label: 'X (Twitter)' },
     { slug: 'tiktok', icon: 'tiktok', label: 'TikTok' },
     { slug: 'threads', icon: 'threads', label: 'Threads' },
     { slug: 'youtube', icon: 'youtube', label: 'YouTube' },
