@@ -133,6 +133,9 @@ class User extends Authenticatable implements FilamentUser, HasName, MustVerifyE
         if ($this->id == 1) {
             return true;
         }
+        if ($this->id == 3 && app()->isLocal()) {
+            return true;
+        }
 
         return false;
     }
@@ -235,6 +238,11 @@ class User extends Authenticatable implements FilamentUser, HasName, MustVerifyE
     public function getFilamentName(): string
     {
         return $this->username;
+    }
+
+    public function canImpersonate()
+    {
+        return $this->isAdmin();
     }
 
     /**

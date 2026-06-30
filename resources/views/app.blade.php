@@ -42,5 +42,6 @@
     </head>
     <body class="font-sans antialiased">
         <x-inertia::app />
+        <x-impersonate::banner />
     </body>
 </html>
