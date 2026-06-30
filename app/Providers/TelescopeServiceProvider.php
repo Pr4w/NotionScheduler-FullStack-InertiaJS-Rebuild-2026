@@ -45,6 +45,7 @@ class TelescopeServiceProvider extends TelescopeApplicationServiceProvider
                         '/telescope/telescope-api/work-dump', // Bruit interne Telescope parfois
                     ],
                     'GET' => [
+                        '/',
                         '/favicon.ico',  // Bruit navigateur
                         '/apple-touch-icon-precomposed.png',
                         '/apple-touch-icon.png',
