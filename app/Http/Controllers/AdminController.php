@@ -122,7 +122,7 @@ class AdminController extends Controller
 
         $pages = $notion->databases()->queryAllPages($database);
 
-        $app_url = "https://api.notionscheduler.app";
+        $app_url = url('/app');
 
         foreach ($pages as $page) {
 
@@ -249,7 +249,7 @@ class AdminController extends Controller
         echo "<h1>User report</h1>";
         dump($user);
 
-        $app_url = "https://api.notionscheduler.app";
+        $app_url = url('/app');
 
         foreach ($databases as $db) {
             echo "<a href='$app_url/admin/debugDatabase/" . $db->id . "'>Database with ID ".$db->id."</a><br />";

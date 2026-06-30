@@ -494,7 +494,7 @@ onMounted(() => {
                         </div>
                     </div>
 
-                    <!-- Linked accounts (compact multi-column grid) -->
+                    <!-- Linked accounts — grouped by platform, avatar chips -->
                     <div class="mt-4 border-t border-border pt-3">
                         <div
                             class="mb-2 text-xs font-medium text-muted-foreground"
@@ -507,30 +507,67 @@ onMounted(() => {
                         >
                             No accounts linked yet.
                         </p>
-                        <div
-                            v-else
-                            class="grid grid-cols-2 gap-x-4 gap-y-3 @md:grid-cols-3 @xl:grid-cols-4"
-                        >
+                        <div v-else class="space-y-3">
                             <div
                                 v-for="group in groupAccounts(db.socials)"
                                 :key="group.platform"
+                                class="space-y-1.5"
                             >
                                 <div
-                                    class="mb-1 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground"
+                                    class="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase"
                                 >
                                     <SocialIcon
                                         :platform="group.platform"
                                         class="h-3.5 w-3.5 shrink-0"
                                     />
                                     {{ cap(group.platform) }}
+                                    <span class="font-normal"
+                                        >({{ group.accounts.length }})</span
+                                    >
                                 </div>
-                                <div
-                                    v-for="s in group.accounts"
-                                    :key="s.id"
-                                    class="truncate text-xs"
-                                    :title="s.name ?? cap(s.platform)"
-                                >
-                                    {{ s.name ?? cap(s.platform) }}
+                                <div class="flex flex-wrap gap-2">
+                                    <span
+                                        v-for="s in group.accounts"
+                                        :key="s.id"
+                                        class="inline-flex items-center gap-2 rounded-full border border-border bg-muted/40 py-1 pr-3 pl-1 text-sm"
+                                    >
+                                        <span class="relative shrink-0">
+                                            <img
+                                                v-if="s.profile_picture"
+                                                :src="s.profile_picture"
+                                                alt=""
+                                                class="h-6 w-6 rounded-full object-cover"
+                                            />
+                                            <span
+                                                v-else
+                                                class="flex h-6 w-6 items-center justify-center rounded-full bg-muted"
+                                            >
+                                                <SocialIcon
+                                                    :platform="s.platform"
+                                                    class="h-3 w-3"
+                                                />
+                                            </span>
+                                            <span
+                                                class="absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-background"
+                                                :class="
+                                                    truthy(s.is_valid)
+                                                        ? 'bg-green-500'
+                                                        : 'bg-red-500'
+                                                "
+                                                :title="
+                                                    truthy(s.is_valid)
+                                                        ? 'Connected'
+                                                        : 'Needs reconnecting'
+                                                "
+                                            ></span>
+                                        </span>
+                                        <span
+                                            class="max-w-[12rem] truncate font-medium"
+                                            >{{
+                                                s.name ?? cap(s.platform)
+                                            }}</span
+                                        >
+                                    </span>
                                 </div>
                             </div>
                         </div>

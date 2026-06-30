@@ -472,14 +472,17 @@ class NotionPosts extends Model implements Eventable
     public static function storeFileInLocalStorage($userid, $media)
     {
 
-        $folder = 'public/uploadable_media/';
         $filename = 'user'.$userid.'_rand'.bin2hex(random_bytes(10)).'-'.Carbon::now()->timestamp.'.'.$media['extension'];
-        $store = Storage::put(
-            $folder.$filename,
-            fopen($media['url'], 'r')
-        );
+        $path = 'uploadable_media/'.$filename;
 
-        return 'https://api.notionscheduler.app/storage/uploadable_media/'.$filename;
+        // Same physical location as before (storage/app/public/uploadable_media),
+        // just addressed via the 'public' disk so its URL is config-driven.
+        Storage::disk('public')->put($path, fopen($media['url'], 'r'));
+
+        // Resolves to {APP_URL}/storage/uploadable_media/{filename} from the
+        // 'public' disk's 'url' setting — tracks the current domain instead of
+        // a hardcoded one.
+        return Storage::disk('public')->url($path);
 
     }
 

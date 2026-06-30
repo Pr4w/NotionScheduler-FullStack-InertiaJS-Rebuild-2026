@@ -73,6 +73,15 @@ function toggle(id: number) {
     }
 }
 
+const allSelected = computed(
+    () =>
+        props.socials.length > 0 &&
+        selected.value.length === props.socials.length,
+);
+function toggleAll() {
+    selected.value = allSelected.value ? [] : props.socials.map((s) => s.id);
+}
+
 const save = useHttp<{ database_id: number; social_accounts: number[] }>({
     database_id: props.databaseId,
     social_accounts: [],
@@ -108,6 +117,23 @@ function doSave() {
                     database.</DialogDescription
                 >
             </DialogHeader>
+
+            <div
+                v-if="socials.length"
+                class="flex items-center justify-between border-b border-border px-2 pb-2 text-xs"
+            >
+                <span class="text-muted-foreground"
+                    >{{ selected.length }} of
+                    {{ socials.length }} selected</span
+                >
+                <button
+                    type="button"
+                    class="font-medium text-primary hover:underline"
+                    @click="toggleAll"
+                >
+                    {{ allSelected ? 'Clear all' : 'Select all' }}
+                </button>
+            </div>
 
             <div class="max-h-[60vh] space-y-3 overflow-y-auto py-2">
                 <p v-if="!socials.length" class="text-sm text-muted-foreground">
