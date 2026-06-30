@@ -36,7 +36,11 @@
         <div class="flex items-center gap-2">
             {{-- Wrapper hides on mobile: `hidden` on the button itself loses to x-ui.button's base `inline-flex`. --}}
             <span class="hidden sm:inline-flex">
-                <x-ui.button href="/app/register" size="sm" icon> Get started </x-ui.button>
+                @auth
+                    <x-ui.button href="/app/dashboard" size="sm" icon> Dashboard </x-ui.button>
+                @else
+                    <x-ui.button href="/app/register" size="sm" icon> Get started </x-ui.button>
+                @endauth
             </span>
 
             {{-- Mobile toggle --}}
@@ -66,7 +70,11 @@
             ] as $href => $label)
                 <a href="{{ $href }}" data-nav-toggle class="border-line border-b py-3 font-semibold"> {{ $label }} </a>
             @endforeach
-            <x-ui.button href="/app/register" class="mt-4" icon>Get started free</x-ui.button>
+            @auth
+                <x-ui.button href="/app/dashboard" class="mt-4" icon>Dashboard</x-ui.button>
+            @else
+                <x-ui.button href="/app/register" class="mt-4" icon>Get started free</x-ui.button>
+            @endauth
         </nav>
     </div>
 </header>
