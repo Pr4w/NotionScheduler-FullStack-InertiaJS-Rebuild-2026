@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { edit } from '@/routes/profile';
 import { send } from '@/routes/verification';
+import { useBillingPortal } from '@/composables/useBillingPortal';
 
 defineOptions({
     layout: {
@@ -25,6 +26,20 @@ defineOptions({
 
 const page = usePage();
 const user = computed(() => page.props.auth.user);
+
+const { openBillingPortal, http: billing } = useBillingPortal();
+const planName = computed<string | null>(() => {
+    const u = user.value as {
+        subscription_details?: { details?: { name?: string } };
+    };
+    return u.subscription_details?.details?.name ?? null;
+});
+const invoicesUrl = computed(
+    () =>
+        `https://app.invoicr.app/i/notionscheduler?email=${encodeURIComponent(
+            (user.value as { email?: string }).email ?? '',
+        )}`,
+);
 </script>
 
 <template>
@@ -100,6 +115,44 @@ const user = computed(() => page.props.auth.user);
             </div>
         </Form>
     </div>
+
+    <section class="mt-6 flex flex-col space-y-6">
+        <Heading
+            variant="small"
+            title="Billing"
+            description="Manage your subscription, payment method and invoices."
+        />
+        <div class="rounded-xl border border-border p-4">
+            <p class="text-sm text-muted-foreground">
+                You're currently on the
+                <strong class="text-foreground">{{
+                    planName ?? 'free'
+                }}</strong>
+                plan.
+            </p>
+            <div class="mt-4 flex flex-wrap items-center gap-4">
+                <Button
+                    :disabled="billing.processing"
+                    @click="openBillingPortal"
+                >
+                    Manage subscription
+                </Button>
+                <a
+                    :href="invoicesUrl"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="text-sm font-medium text-primary hover:underline"
+                >
+                    View invoices ↗
+                </a>
+            </div>
+            <p class="mt-3 text-xs text-muted-foreground">
+                Opens the secure Stripe portal to update your card, change plan
+                or cancel. If you're on a free plan there's nothing to manage
+                yet.
+            </p>
+        </div>
+    </section>
 
     <DeleteUser />
 </template>

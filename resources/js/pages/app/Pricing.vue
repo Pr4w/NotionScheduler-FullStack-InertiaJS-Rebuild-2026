@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { Head, Link, useHttp } from '@inertiajs/vue3';
 import { toast } from 'vue-sonner';
-import { Check } from '@lucide/vue';
+import { Check, Tag } from '@lucide/vue';
 import { Button } from '@/components/ui/button';
+import { useBillingPortal } from '@/composables/useBillingPortal';
 
 type Money = number | { price: number; stripe: string };
 
@@ -23,9 +24,15 @@ interface Tier extends PriceTier {
     key: string;
 }
 
+interface Discount {
+    name: string;
+    discount_percentage: number;
+}
+
 const props = defineProps<{
     packages: Record<string, PriceTier>;
     currentTier: string;
+    discount: Discount | null;
 }>();
 
 defineOptions({
@@ -38,6 +45,25 @@ const plan = ref<'monthly' | 'yearly'>('monthly');
 // Agency (tier_4) is tucked away behind a "need more?" toggle — unless the user
 // is already on it.
 const showAgency = ref(props.currentTier === 'tier_4');
+
+const { openBillingPortal, http: billing } = useBillingPortal();
+// Paid plans can be managed/cancelled via the Stripe portal; free/beta/trial can't.
+const isSubscribed = computed(() =>
+    ['tier_2', 'tier_3', 'tier_4'].includes(props.currentTier),
+);
+
+// Surface the Stripe checkout round-trip result (?status=success|cancel), then
+// clean the URL so a refresh doesn't re-toast.
+onMounted(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get('status');
+    if (status === 'success') {
+        toast.success('Subscription activated — welcome aboard! 🎉');
+    } else if (status === 'cancel') {
+        toast('Checkout canceled — no charge was made.');
+    }
+    if (status) window.history.replaceState({}, '', '/app/pricing');
+});
 
 const tier = (key: string): Tier | null =>
     props.packages[key] ? { key, ...props.packages[key] } : null;
@@ -131,6 +157,28 @@ const togglePlan = (p: string): string =>
                     Yearly
                 </button>
             </div>
+
+            <button
+                v-if="isSubscribed"
+                type="button"
+                class="text-sm font-medium text-primary hover:underline disabled:opacity-50"
+                :disabled="billing.processing"
+                @click="openBillingPortal"
+            >
+                Manage your current subscription ↗
+            </button>
+        </div>
+
+        <!-- Affiliate referral discount -->
+        <div
+            v-if="discount"
+            class="mx-auto flex max-w-xl items-center gap-3 rounded-xl border border-green-300 bg-green-50 px-4 py-3 text-sm text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-300"
+        >
+            <Tag class="h-5 w-5 shrink-0" />
+            <span>
+                <strong>{{ discount.discount_percentage }}% off</strong> is
+                applied at checkout thanks to {{ discount.name }}'s referral.
+            </span>
         </div>
 
         <!-- Plans -->

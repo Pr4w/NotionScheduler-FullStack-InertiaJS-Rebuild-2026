@@ -206,7 +206,7 @@ class UserController extends Controller {
         // Generate URL
         try {
             $url = $request->user()->billingPortalUrl(
-                config('app.frontend_url') . '/profile'
+                config('app.frontend_url') . '/app/settings/profile'
             );
             return Response::default(
                 'OK',

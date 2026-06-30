@@ -98,10 +98,26 @@ class StripePaymentController extends Controller
     // NOTE - Inertia pricing page
     public function page(Request $request): \Inertia\Response
     {
+        $user = $request->user();
+
+        // Affiliate referral discount (same lookup as returnPackagesAndDiscounts).
+        // The coupon is applied for real at checkout (see purchase()), so it's
+        // safe to advertise here.
+        $discount = null;
+        if ($user->affiliate_parent) {
+            $affiliate = UserAffiliates::where('userid', $user->affiliate_parent)->first();
+            if ($affiliate && $affiliate->stripe_coupon && $affiliate->discount_percentage) {
+                $discount = [
+                    'name' => $affiliate->name,
+                    'discount_percentage' => $affiliate->discount_percentage,
+                ];
+            }
+        }
 
         return Inertia::render('app/Pricing', [
             'packages' => $this->packages,
-            'currentTier' => $request->user()->getTier(),
+            'currentTier' => $user->getTier(),
+            'discount' => $discount,
         ]);
 
     }
