@@ -54,7 +54,9 @@ class TelescopeServiceProvider extends TelescopeApplicationServiceProvider
                         '/autodiscover', // Scan Email Exchange
                         '/admin/logs',        // Scan Admin
                         '/admin/logs/check',        // Scan Admin
-                        '/admin/*'
+                        '/admin/*',
+                        '/log-viewer',
+                        'log-viewer/*'
                     ],
                     'HEAD' => [
                         '/',             // Uptime monitors (Pingdom, UptimeRobot...)
