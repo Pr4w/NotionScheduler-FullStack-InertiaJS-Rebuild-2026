@@ -32,7 +32,7 @@ Schedule::command('app:send-telemetry')->daily();
 Schedule::command('metrics:scrape')->everyMinute()->withoutOverlapping();
 
 // 3am maintenance slot: prune Telescope, then back up the DB + files.
-Schedule::command('telescope:prune --hours=48')->dailyAt('03:00');
+Schedule::command('telescope:prune --hours=24')->dailyAt('03:00');
 Schedule::command('backup:run')->daily()->at('03:10');
 Schedule::command('backup:clean')->daily()->at('03:40');
 

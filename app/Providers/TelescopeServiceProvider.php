@@ -30,7 +30,52 @@ class TelescopeServiceProvider extends TelescopeApplicationServiceProvider
             //        $entry->isScheduledTask() ||
             //        $entry->hasMonitoredTag();
 
-            if ($entry->type === 'job') {
+            if ($entry->type === 'request') {
+                $method = $entry->content['method'] ?? 'GET';
+                $uri = $entry->content['uri'] ?? '/';
+
+                // Configuration des exclusions
+                $ignored = [
+                    'POST' => [
+                        '/',             // Bot qui ping la racine en POST
+                        '/api',          // Scan API générique
+                        '/admin',        // Scan Admin
+                        '/xmlrpc.php',   // Scan WordPress
+                        '/wp-login.php',
+                        '/telescope/telescope-api/work-dump', // Bruit interne Telescope parfois
+                    ],
+                    'GET' => [
+                        '/favicon.ico',  // Bruit navigateur
+                        '/apple-touch-icon-precomposed.png',
+                        '/apple-touch-icon.png',
+                        '/robots.txt',   // Bruit SEO/Bot
+                        '/.env',         // Tentative de hack
+                        '/autodiscover', // Scan Email Exchange
+                        '/admin/logs',        // Scan Admin
+                        '/admin/logs/check',        // Scan Admin
+                    ],
+                    'HEAD' => [
+                        '/',             // Uptime monitors (Pingdom, UptimeRobot...)
+                    ]
+                ];
+
+                // Si la méthode existe dans notre liste noire
+                if (isset($ignored[$method])) {
+                    foreach ($ignored[$method] as $ignoredPath) {
+                        // On bloque si c'est exactement l'URL, ou si ça commence par (ex: /admin/login)
+                        // L'astuce du wildcard '*' pour les patterns
+                        if ($uri === $ignoredPath || 
+                        ($ignoredPath !== '/' && str_starts_with($uri, $ignoredPath))) {
+                            return false; // On ne log pas
+                        }
+                        
+                        // Gestion du wildcard explicite (ex: '/telescope*')
+                        if (str_contains($ignoredPath, '*') && fnmatch($ignoredPath, $uri)) {
+                            return false;
+                        }
+                    }
+                }
+            } elseif ($entry->type === 'job') {
 
                 // Log::debug('TELESCOPE JOB DEBUG', [
                 //     'raw_type'      => $entry->type,
