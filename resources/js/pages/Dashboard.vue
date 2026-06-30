@@ -15,6 +15,7 @@ import {
     RefreshCw,
     Send,
     Share2,
+    Sparkles,
     Trash2,
 } from '@lucide/vue';
 import AddDatabaseDialog from '@/components/AddDatabaseDialog.vue';
@@ -161,6 +162,38 @@ const tabs = computed(() => [
         icon: Send,
         badge:
             submittedTotal.value !== null ? String(submittedTotal.value) : null,
+    },
+]);
+
+// Top-of-page overview cards. Each gets a tinted icon chip for a bit of colour.
+const stats = computed(() => [
+    {
+        label: 'Notion databases',
+        value: props.databases.length as number | string,
+        sub: plan.value ? `of ${plan.value.options.databases}` : '',
+        icon: Database,
+        tint: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
+    },
+    {
+        label: 'Social accounts',
+        value: props.socials.length as number | string,
+        sub: plan.value ? `of ${plan.value.options.social_accounts}` : '',
+        icon: AtSign,
+        tint: 'bg-violet-500/10 text-violet-600 dark:text-violet-400',
+    },
+    {
+        label: 'Scheduled posts',
+        value: props.posts.length as number | string,
+        sub: '',
+        icon: CalendarClock,
+        tint: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
+    },
+    {
+        label: 'Published posts',
+        value: submittedTotal.value ?? '—',
+        sub: '',
+        icon: Send,
+        tint: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
     },
 ]);
 
@@ -377,6 +410,10 @@ watch(tab, (t) => {
     if (t === 'submitted' && submittedTotal.value === null) loadSubmitted(true);
 });
 
+// Pre-warm the submitted total so the "Published posts" stat shows a number on
+// load (also makes the Submitted tab instant when opened).
+onMounted(() => loadSubmitted(true));
+
 // Surface the result of an OAuth round-trip (callback redirects here with
 // ?oauth_status / &oauth_platform / &oauth_message), then clean the URL.
 onMounted(() => {
@@ -401,22 +438,21 @@ onMounted(() => {
 
     <div class="flex h-full flex-1 flex-col gap-5 p-4">
         <!-- Greeting -->
-        <div class="flex flex-col gap-1">
-            <h1 class="text-2xl font-semibold tracking-tight">
-                Welcome back, {{ userName }} 👋
-            </h1>
-            <p class="text-sm text-muted-foreground">
-                Here's an overview of your Notion databases, connected accounts
-                and scheduled posts.
-            </p>
-
-            <div
-                v-if="plan"
-                class="mt-2 flex flex-wrap items-center gap-2 text-xs"
-            >
+        <div class="flex flex-wrap items-end justify-between gap-3">
+            <div class="flex flex-col gap-1">
+                <h1 class="text-2xl font-bold tracking-tight">
+                    Welcome back, {{ userName }} 👋
+                </h1>
+                <p class="text-sm text-muted-foreground">
+                    Here's an overview of your Notion databases, connected
+                    accounts and scheduled posts.
+                </p>
+            </div>
+            <div v-if="plan" class="flex flex-wrap items-center gap-2 text-xs">
                 <span
-                    class="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-1 font-medium text-primary"
+                    class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 font-semibold text-primary"
                 >
+                    <Sparkles class="h-3.5 w-3.5" />
                     {{ plan.details.name }} plan
                 </span>
                 <Link
@@ -427,17 +463,52 @@ onMounted(() => {
             </div>
         </div>
 
+        <!-- Stats overview -->
+        <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <div
+                v-for="s in stats"
+                :key="s.label"
+                class="flex items-center gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm"
+            >
+                <span
+                    class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
+                    :class="s.tint"
+                >
+                    <component :is="s.icon" class="h-5 w-5" />
+                </span>
+                <div class="min-w-0">
+                    <div class="flex items-baseline gap-1">
+                        <span class="text-2xl font-bold tracking-tight">{{
+                            s.value
+                        }}</span>
+                        <span
+                            v-if="s.sub"
+                            class="text-xs text-muted-foreground"
+                            >{{ s.sub }}</span
+                        >
+                    </div>
+                    <div
+                        class="truncate text-xs font-medium text-muted-foreground"
+                    >
+                        {{ s.label }}
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <!-- Tabs -->
-        <div class="flex gap-1 overflow-x-auto border-b border-border">
+        <div
+            class="flex gap-1 overflow-x-auto rounded-xl border border-border bg-muted/40 p-1"
+        >
             <button
                 v-for="t in tabs"
                 :key="t.key"
                 type="button"
-                class="-mb-px inline-flex items-center gap-1.5 border-b-2 px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors"
+                class="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors"
                 :class="
                     tab === t.key
-                        ? 'border-primary text-foreground'
-                        : 'border-transparent text-muted-foreground hover:text-foreground'
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground'
                 "
                 @click="tab = t.key"
             >
@@ -445,7 +516,12 @@ onMounted(() => {
                 {{ t.label }}
                 <span
                     v-if="t.badge"
-                    class="ml-0.5 rounded-full bg-muted px-1.5 py-0.5 text-xs"
+                    class="ml-0.5 rounded-full px-1.5 py-0.5 text-xs"
+                    :class="
+                        tab === t.key
+                            ? 'bg-primary/10 text-primary'
+                            : 'bg-muted text-muted-foreground'
+                    "
                     >{{ t.badge }}</span
                 >
             </button>
@@ -458,49 +534,59 @@ onMounted(() => {
             </div>
             <div
                 v-if="!databases.length"
-                class="rounded-xl border border-border p-8 text-center text-muted-foreground"
+                class="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-border bg-muted/20 p-10 text-center"
             >
-                No Notion databases connected yet.
+                <Database class="h-8 w-8 text-muted-foreground/50" />
+                <p class="text-sm text-muted-foreground">
+                    No Notion databases connected yet.
+                </p>
             </div>
 
-            <div v-else class="grid gap-3 xl:grid-cols-2">
+            <div v-else class="grid gap-4 xl:grid-cols-2">
                 <div
                     v-for="db in databases"
                     :key="db.id"
-                    class="@container rounded-xl border border-border p-4"
+                    class="@container rounded-2xl border border-border bg-card p-5 shadow-sm transition-shadow hover:shadow-md"
                 >
                     <!-- Header: name + status + actions -->
                     <div
                         class="flex flex-wrap items-start justify-between gap-3"
                     >
-                        <div class="space-y-1.5">
-                            <div class="flex flex-wrap items-center gap-2">
-                                <span class="font-medium">{{
-                                    db.database_name ?? 'Untitled database'
-                                }}</span>
-                                <a
-                                    :href="notionUrl(db.database_id)"
-                                    target="_blank"
-                                    rel="noopener"
-                                    class="text-xs font-medium text-primary hover:underline"
-                                >
-                                    Open in Notion ↗
-                                </a>
-                            </div>
+                        <div class="flex items-start gap-3">
                             <span
-                                :class="[
-                                    pill,
-                                    truthy(db.is_valid)
-                                        ? 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300'
-                                        : 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300',
-                                ]"
+                                class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-400"
                             >
-                                {{
-                                    truthy(db.is_valid)
-                                        ? 'Connected'
-                                        : 'Needs reconnect'
-                                }}
+                                <Database class="h-5 w-5" />
                             </span>
+                            <div class="space-y-1.5">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <span class="font-semibold">{{
+                                        db.database_name ?? 'Untitled database'
+                                    }}</span>
+                                    <a
+                                        :href="notionUrl(db.database_id)"
+                                        target="_blank"
+                                        rel="noopener"
+                                        class="text-xs font-medium text-primary hover:underline"
+                                    >
+                                        Open in Notion ↗
+                                    </a>
+                                </div>
+                                <span
+                                    :class="[
+                                        pill,
+                                        truthy(db.is_valid)
+                                            ? 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300'
+                                            : 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300',
+                                    ]"
+                                >
+                                    {{
+                                        truthy(db.is_valid)
+                                            ? 'Connected'
+                                            : 'Needs reconnect'
+                                    }}
+                                </span>
+                            </div>
                         </div>
                         <div class="flex shrink-0 gap-2">
                             <ManageDatabaseSocialsDialog
@@ -531,9 +617,9 @@ onMounted(() => {
                     </div>
 
                     <!-- Linked accounts — grouped by platform, avatar chips -->
-                    <div class="mt-4 border-t border-border pt-3">
+                    <div class="mt-4 rounded-xl bg-muted/30 p-3">
                         <div
-                            class="mb-2 text-xs font-medium text-muted-foreground"
+                            class="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase"
                         >
                             Linked accounts ({{ db.socials?.length ?? 0 }})
                         </div>
@@ -565,7 +651,7 @@ onMounted(() => {
                                     <span
                                         v-for="s in group.accounts"
                                         :key="s.id"
-                                        class="inline-flex items-center gap-2 rounded-full border border-border bg-muted/40 py-1 pr-3 pl-1 text-sm"
+                                        class="inline-flex items-center gap-2 rounded-full border border-border bg-card py-1 pr-3 pl-1 text-sm shadow-sm"
                                     >
                                         <span class="relative shrink-0">
                                             <img
@@ -645,15 +731,18 @@ onMounted(() => {
             </div>
             <div
                 v-if="!socials.length"
-                class="rounded-xl border border-border p-8 text-center text-muted-foreground"
+                class="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-border bg-muted/20 p-10 text-center"
             >
-                No social accounts connected yet.
+                <AtSign class="h-8 w-8 text-muted-foreground/50" />
+                <p class="text-sm text-muted-foreground">
+                    No social accounts connected yet.
+                </p>
             </div>
-            <div v-else class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div v-else class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <div
                     v-for="s in filteredSocials"
                     :key="s.id"
-                    class="flex items-center gap-3 rounded-xl border border-border p-3"
+                    class="group flex items-center gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
                 >
                     <div class="relative shrink-0">
                         <img
@@ -717,10 +806,12 @@ onMounted(() => {
         <!-- Scheduled posts -->
         <div
             v-else-if="tab === 'posts'"
-            class="overflow-x-auto rounded-xl border border-border"
+            class="overflow-x-auto rounded-2xl border border-border bg-card shadow-sm"
         >
             <table class="w-full text-sm">
-                <thead class="bg-muted/50 text-left text-muted-foreground">
+                <thead
+                    class="bg-muted/50 text-left text-xs tracking-wide text-muted-foreground uppercase"
+                >
                     <tr>
                         <th class="px-4 py-2 font-medium">Post</th>
                         <th class="px-4 py-2 font-medium">Account</th>
@@ -743,7 +834,7 @@ onMounted(() => {
                     <tr
                         v-for="p in posts"
                         :key="p.id"
-                        class="border-t border-border"
+                        class="border-t border-border transition-colors hover:bg-muted/40"
                     >
                         <td class="px-4 py-3 font-medium">
                             <div class="flex items-center gap-2">
@@ -806,9 +897,13 @@ onMounted(() => {
 
         <!-- Submitted posts -->
         <div v-else class="flex flex-col gap-3">
-            <div class="overflow-x-auto rounded-xl border border-border">
+            <div
+                class="overflow-x-auto rounded-2xl border border-border bg-card shadow-sm"
+            >
                 <table class="w-full text-sm">
-                    <thead class="bg-muted/50 text-left text-muted-foreground">
+                    <thead
+                        class="bg-muted/50 text-left text-xs tracking-wide text-muted-foreground uppercase"
+                    >
                         <tr>
                             <th class="px-4 py-2 font-medium">Post</th>
                             <th class="px-4 py-2 font-medium">Account</th>
@@ -842,7 +937,7 @@ onMounted(() => {
                         <tr
                             v-for="p in submitted.items"
                             :key="p.id"
-                            class="border-t border-border"
+                            class="border-t border-border transition-colors hover:bg-muted/40"
                         >
                             <td class="px-4 py-3 font-medium">
                                 <div class="flex items-center gap-2">
