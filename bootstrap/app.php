@@ -23,6 +23,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->validateCsrfTokens(except: [
             'webhooks/*',
             'stripe/*',
+            'app/connect/*',
         ]);
 
         $middleware->web(append: [
