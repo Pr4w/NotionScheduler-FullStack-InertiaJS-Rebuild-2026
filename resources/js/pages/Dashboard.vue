@@ -1,15 +1,20 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch, type Component } from 'vue';
 import { Head, Link, router, useHttp, usePage } from '@inertiajs/vue3';
 import { toast } from 'vue-sonner';
 import { Button } from '@/components/ui/button';
 import {
     AtSign,
+    Bookmark,
     CalendarClock,
     ChevronDown,
     Database,
+    Eye,
+    Heart,
+    MessageCircle,
     RefreshCw,
     Send,
+    Share2,
     Trash2,
 } from '@lucide/vue';
 import AddDatabaseDialog from '@/components/AddDatabaseDialog.vue';
@@ -40,6 +45,14 @@ interface NotionDatabase {
     socials: SocialAccount[];
 }
 
+interface PostMetrics {
+    views: number | null;
+    likes: number | null;
+    comments: number | null;
+    shares: number | null;
+    saves: number | null;
+}
+
 interface Post {
     id: number;
     post_name: string | null;
@@ -51,6 +64,7 @@ interface Post {
     in_flight: number | boolean;
     permalink: string | null;
     post_page_id: string | null;
+    latest_metrics?: PostMetrics | null;
 }
 
 interface Account {
@@ -167,6 +181,28 @@ function fmtNum(n: number | null): string {
         return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M';
     if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'k';
     return String(n);
+}
+
+// Engagement metrics for a submitted post — only the ones the platform actually
+// reported (skip null/0), each as an icon + count. Empty array → no metrics yet.
+function engagementItems(
+    m: PostMetrics | null | undefined,
+): { icon: Component; value: number; label: string }[] {
+    if (!m) return [];
+    const defs: { key: keyof PostMetrics; icon: Component; label: string }[] = [
+        { key: 'views', icon: Eye, label: 'views' },
+        { key: 'likes', icon: Heart, label: 'likes' },
+        { key: 'comments', icon: MessageCircle, label: 'comments' },
+        { key: 'shares', icon: Share2, label: 'shares' },
+        { key: 'saves', icon: Bookmark, label: 'saves' },
+    ];
+    return defs
+        .filter((d) => typeof m[d.key] === 'number' && (m[d.key] as number) > 0)
+        .map((d) => ({
+            icon: d.icon,
+            value: m[d.key] as number,
+            label: d.label,
+        }));
 }
 
 // Only surface followers/posts when we actually have the data, so cards never
@@ -777,6 +813,7 @@ onMounted(() => {
                             <th class="px-4 py-2 font-medium">Post</th>
                             <th class="px-4 py-2 font-medium">Account</th>
                             <th class="px-4 py-2 font-medium">Posted</th>
+                            <th class="px-4 py-2 font-medium">Engagement</th>
                             <th class="px-4 py-2 font-medium">Status</th>
                         </tr>
                     </thead>
@@ -788,7 +825,7 @@ onMounted(() => {
                             "
                         >
                             <td
-                                colspan="4"
+                                colspan="5"
                                 class="px-4 py-8 text-center text-muted-foreground"
                             >
                                 Loading…
@@ -796,7 +833,7 @@ onMounted(() => {
                         </tr>
                         <tr v-else-if="!submitted.items.length">
                             <td
-                                colspan="4"
+                                colspan="5"
                                 class="px-4 py-8 text-center text-muted-foreground"
                             >
                                 No submitted posts yet.
@@ -840,6 +877,32 @@ onMounted(() => {
                             </td>
                             <td class="px-4 py-3 whitespace-nowrap">
                                 {{ fmtDate(p.posted_date) }}
+                            </td>
+                            <td class="px-4 py-3">
+                                <div
+                                    v-if="
+                                        engagementItems(p.latest_metrics).length
+                                    "
+                                    class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs"
+                                >
+                                    <span
+                                        v-for="e in engagementItems(
+                                            p.latest_metrics,
+                                        )"
+                                        :key="e.label"
+                                        class="inline-flex items-center gap-1"
+                                        :title="e.label"
+                                    >
+                                        <component
+                                            :is="e.icon"
+                                            class="h-3.5 w-3.5 text-muted-foreground"
+                                        />
+                                        {{ fmtNum(e.value) }}
+                                    </span>
+                                </div>
+                                <span v-else class="text-muted-foreground"
+                                    >—</span
+                                >
                             </td>
                             <td class="px-4 py-3">
                                 <span
