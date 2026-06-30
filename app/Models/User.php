@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\StripePackages;
 use Carbon\Carbon;
+use Carbon\CarbonInterface;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Models\Contracts\HasName;
 use Filament\Panel;
@@ -16,8 +17,9 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Cashier\Billable;
+// use SimpleStatsIo\LaravelClient\Contracts\TrackablePerson;
 
-class User extends Authenticatable implements FilamentUser, HasName, MustVerifyEmail
+class User extends Authenticatable implements FilamentUser, HasName, MustVerifyEmail //, TrackablePerson
 {
     use Billable, HasFactory, Notifiable;
 
@@ -247,4 +249,12 @@ class User extends Authenticatable implements FilamentUser, HasName, MustVerifyE
             'password' => 'hashed',
         ];
     }
+
+    /**
+     * The time when the user has registered.
+     */
+    // public function getTrackingTime(): CarbonInterface
+    // {
+    //     return $this->created_at;
+    // }
 }
