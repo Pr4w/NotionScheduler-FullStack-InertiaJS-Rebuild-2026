@@ -342,6 +342,20 @@ function deletePost(id: number) {
     });
 }
 
+function reschedulePost(id: number) {
+    postAction.id = id;
+    postAction.post('/app/post/reschedule', {
+        onSuccess: (res) => {
+            toastFromEnvelope(
+                res,
+                'Post re-armed — it will be retried shortly.',
+            );
+            loadScheduled(true);
+        },
+        onError: () => toast.error('Could not reschedule the post.'),
+    });
+}
+
 const socialAction = useHttp<{ id: number | null }>({ id: null });
 function removeSocial(id: number) {
     socialAction.id = id;
@@ -1076,7 +1090,24 @@ onMounted(() => {
                                         >
                                     </td>
                                     <td :class="td">
-                                        <div class="flex justify-end">
+                                        <div class="flex justify-end gap-2">
+                                            <Button
+                                                v-if="
+                                                    [
+                                                        'scheduled',
+                                                        'error',
+                                                    ].includes(p.status)
+                                                "
+                                                size="sm"
+                                                variant="outline"
+                                                :disabled="
+                                                    postAction.processing
+                                                "
+                                                @click="reschedulePost(p.id)"
+                                            >
+                                                <RefreshCw class="h-4 w-4" />
+                                                Reschedule
+                                            </Button>
                                             <Button
                                                 size="sm"
                                                 variant="outline"

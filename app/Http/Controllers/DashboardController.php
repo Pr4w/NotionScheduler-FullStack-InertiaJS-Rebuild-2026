@@ -1355,17 +1355,24 @@ class DashboardController extends Controller
             return Response::failWithMessage('warning', 'No post specified');
         }
 
-        // Check
+        // Allow rescheduling both still-scheduled posts and failed ones (retry).
         $post = NotionPosts::where('id', $request->id)
             ->where('userid', Auth::id())
-            ->where('status', 'scheduled')
+            ->whereIn('status', ['scheduled', 'error'])
             ->first();
 
         if (! $post) {
             return Response::failWithMessage('warning', "We couldn't find the post you're trying to re-schedule. Has it already been removed from the schedule?");
         }
 
-        // Dispatch a job to edit it in the DB
+        // Re-arm the post: clear any stuck in-flight / error state so the
+        // perform-posts command picks it up again on its next run.
+        $post->status = 'scheduled';
+        $post->in_flight = 0;
+        $post->in_flight_start = null;
+        $post->save();
+
+        // Sync the change back to the Notion row.
         UpdateNotionDatabaseEntry::dispatch(
             $post,
             'reschedule'
