@@ -6477,12 +6477,12 @@
             "source": {
                 "type": "git",
                 "url": "https://github.com/Pr4w/Laravel-Social-Metrics.git",
-                "reference": "cf4c95cb15797a6565634ee04fffb1cd4d99f487"
+                "reference": "0fc1d29997268485a896d32dffe29437e540de9c"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/Pr4w/Laravel-Social-Metrics/zipball/cf4c95cb15797a6565634ee04fffb1cd4d99f487",
-                "reference": "cf4c95cb15797a6565634ee04fffb1cd4d99f487",
+                "url": "https://api.github.com/repos/Pr4w/Laravel-Social-Metrics/zipball/0fc1d29997268485a896d32dffe29437e540de9c",
+                "reference": "0fc1d29997268485a896d32dffe29437e540de9c",
                 "shasum": ""
             },
             "require": {
@@ -6515,7 +6515,7 @@
                 "source": "https://github.com/Pr4w/Laravel-Social-Metrics/tree/main",
                 "issues": "https://github.com/Pr4w/Laravel-Social-Metrics/issues"
             },
-            "time": "2026-06-18T07:49:55+00:00"
+            "time": "2026-07-01T11:35:48+00:00"
         },
         {
             "name": "pragmarx/google2fa",

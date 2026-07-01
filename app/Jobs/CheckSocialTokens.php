@@ -143,17 +143,15 @@ class CheckSocialTokens implements ShouldQueue, ShouldBeUnique
                 return;
             }
 
-            $accountId = (string) ($account->account_id ?? $account->id);
+            // The package reads the identifier straight from accountId now.
+            // LinkedIn detects person-vs-org from the URN, so hand it the full
+            // URN (account_full_identifier); every other platform wants its
+            // native account id.
+            $accountId = (string) ($account->platform === 'linkedin'
+                ? $account->account_full_identifier
+                : ($account->account_id ?? $account->id));
 
-            // Pass the native id under every meta key a driver might read; only
-            // the matching platform's driver looks at its own key.
-            $ref = AccountRef::make($account->platform, $accountId, $token, [
-                'ig_user_id' => $account->account_id,
-                'page_id' => $account->account_id,
-                'threads_user_id' => $account->account_id,
-                'channel_id' => $account->account_id,
-                'organization_urn' => $account->account_full_identifier,
-            ]);
+            $ref = AccountRef::make($account->platform, $accountId, $token);
 
             // fetchAccounts never throws for partial failures — errors land in
             // the result. We only act on a real number coming back.
