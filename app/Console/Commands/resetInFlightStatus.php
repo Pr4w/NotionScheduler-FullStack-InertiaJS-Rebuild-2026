@@ -70,9 +70,9 @@ class resetInFlightStatus extends Command
             Log::info("resetInFlightStatus - timed out stuck post #{$post->id} ({$post->platform}) after {$timeout_mins} min");
         }
 
-        Log::info('resetInFlightStatus - done', [
-            'stale_errors_cleared' => $stale_errors->count(),
-            'stuck_timed_out' => $stuck->count(),
-        ]);
+        // Log::info('resetInFlightStatus - done', [
+        //     'stale_errors_cleared' => $stale_errors->count(),
+        //     'stuck_timed_out' => $stuck->count(),
+        // ]);
     }
 }
