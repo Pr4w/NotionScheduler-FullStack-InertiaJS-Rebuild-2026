@@ -143,6 +143,15 @@ class CheckSocialTokens implements ShouldQueue, ShouldBeUnique
                 return;
             }
 
+            // LinkedIn: account-follower stats need scopes that were only added
+            // to tokens issued from 1 Jul 2026. Older tokens lack them and would
+            // just 403, so skip the refresh until the account is reconnected.
+            if ($account->platform === 'linkedin'
+                && (! $tokenRow?->created_at
+                    || $tokenRow->created_at->lt(Carbon::create(2026, 7, 1)))) {
+                return;
+            }
+
             // The package reads the identifier straight from accountId now.
             // LinkedIn detects person-vs-org from the URN, so hand it the full
             // URN (account_full_identifier); every other platform wants its
