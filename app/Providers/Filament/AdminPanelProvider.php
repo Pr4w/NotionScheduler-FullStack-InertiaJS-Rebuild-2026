@@ -20,6 +20,8 @@ use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 
+use Filament\Navigation\NavigationItem;
+
 /**
  * Unified admin panel: merges the old api ops admin (Notion posts calendar)
  * and the old landing blog/SEO admin into one Filament 5 panel at /admin.
@@ -38,6 +40,13 @@ class AdminPanelProvider extends PanelProvider
             ->homeUrl('/')
             ->favicon(asset('/favicon.png'))
             ->login()
+            ->navigationItems([
+                NavigationItem::make('Telescope')
+                    ->url('/telescope')
+                    ->icon('heroicon-s-eye')
+                    ->group('System')
+                    ->sort(3)
+            ])
             ->colors([
                 'primary' => Color::Amber,
             ])

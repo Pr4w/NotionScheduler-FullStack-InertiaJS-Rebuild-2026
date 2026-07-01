@@ -170,6 +170,15 @@ class OAuthController extends Controller
             $old
         );
 
+        // Fresh connect/reconnect: clear the metrics stamp so
+        // metrics:scrape-accounts re-scans this account on its next run instead
+        // of waiting up to a day (e.g. a reconnected LinkedIn account that only
+        // now has the follower scopes should populate promptly).
+        if ($insert->metrics_last_scraped_at !== null) {
+            $insert->metrics_last_scraped_at = null;
+            $insert->save();
+        }
+
         // Add to DB if unique
         $this->addAccountToDatabaseIfUnique(Auth::id(), $insert);
 
