@@ -14,9 +14,6 @@ use App\Models\User;
 
 use App\Models\SocialManagers\LinkedInTools;
 
-use Pr4w\SocialMetrics\Facades\SocialMetrics;
-use Pr4w\SocialMetrics\Support\AccountRef;
-
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Config;
@@ -98,98 +95,9 @@ class CheckSocialTokens implements ShouldQueue, ShouldBeUnique
     }
 
     /**
-     * Execute the job: run the (unchanged) token validation, then enrich the
-     * account with fresh follower counts from the SocialMetrics package. The
-     * enrichment is fully isolated (see refreshFollowerCount) so it can never
-     * affect token refreshing/management.
+     * Execute the job.
      */
     public function handle(): void
-    {
-        $this->checkTokens();
-        $this->refreshFollowerCount();
-    }
-
-    /**
-     * Best-effort follower-count refresh via Pr4w\SocialMetrics. Runs after the
-     * token checks, only for a still-valid account, and swallows every error so
-     * it never interferes with the token flow. This is the single source of
-     * truth for `followers` now — the per-platform inline updates were migrated
-     * here so every network is aligned on the same package.
-     */
-    protected function refreshFollowerCount(): void
-    {
-        try {
-            $account = $this->account->fresh();
-
-            // Skip if the token checks disabled the account (or it vanished).
-            if (! $account || ! $account->is_valid) {
-                return;
-            }
-
-            // Only platforms the package has a driver for. Twitter/X has none.
-            $supported = ['facebook', 'instagram', 'threads', 'linkedin', 'tiktok', 'youtube'];
-            if (! in_array($account->platform, $supported, true)) {
-                return;
-            }
-
-            // Facebook reads page-level stats via the page token; the rest use
-            // the account token. YouTube is key-based (needs no token here).
-            $tokenRow = $account->access_token;
-            $token = $account->platform === 'facebook'
-                ? ($tokenRow->access_token_page ?? $tokenRow->access_token ?? null)
-                : ($tokenRow->access_token ?? null);
-
-            if ($account->platform !== 'youtube' && ! $token) {
-                return;
-            }
-
-            // LinkedIn: account-follower stats need scopes that were only added
-            // to tokens issued from 1 Jul 2026. Older tokens lack them and would
-            // just 403, so skip the refresh until the account is reconnected.
-            if ($account->platform === 'linkedin'
-                && (! $tokenRow?->created_at
-                    || $tokenRow->created_at->lt(Carbon::create(2026, 7, 1)))) {
-                return;
-            }
-
-            // The package reads the identifier straight from accountId now.
-            // LinkedIn detects person-vs-org from the URN, so hand it the full
-            // URN (account_full_identifier); every other platform wants its
-            // native account id.
-            $accountId = (string) ($account->platform === 'linkedin'
-                ? $account->account_full_identifier
-                : ($account->account_id ?? $account->id));
-
-            $ref = AccountRef::make($account->platform, $accountId, $token);
-
-            // fetchAccounts never throws for partial failures — errors land in
-            // the result. We only act on a real number coming back.
-            $metrics = SocialMetrics::fetchAccounts([$ref])->accounts->first();
-
-            if ($metrics && $metrics->followers !== null) {
-                $account->followers = $metrics->followers;
-                if ($metrics->following !== null) {
-                    $account->followings = $metrics->following;
-                }
-                if ($metrics->posts !== null) {
-                    $account->post_count = $metrics->posts;
-                }
-                $account->save();
-            }
-        } catch (\Throwable $e) {
-            Log::info('CheckSocialTokens - refreshFollowerCount skipped (non-fatal)', [
-                'account_id' => $this->account->id ?? null,
-                'platform' => $this->account->platform ?? null,
-                'error' => $e->getMessage(),
-            ]);
-        }
-    }
-
-    /**
-     * Token validation + management. (Formerly handle(); unchanged in body — its
-     * per-platform early returns now return from here, not the whole job.)
-     */
-    protected function checkTokens(): void
     {
 
         Log::withContext([
@@ -514,7 +422,7 @@ class CheckSocialTokens implements ShouldQueue, ShouldBeUnique
                                         'name' => $accounts[$key]['name'],
                                         'profile_picture' => $accounts[$key]['profile_picture'],
                                         'last_token_check_scan' => Carbon::now(),
-                                        // 'followers' now refreshed via SocialMetrics (see refreshFollowerCount)
+                                        // 'followers' now refreshed by the QueryAccountMetrics job (metrics:scrape-accounts)
                                         'followings' => $accounts[$key]['followings'],
                                         'engagement' => $accounts[$key]['engagement'],
                                         'post_count' => $accounts[$key]['post_count'],
@@ -749,8 +657,8 @@ class CheckSocialTokens implements ShouldQueue, ShouldBeUnique
                     $this->account->last_token_check_scan = Carbon::now();
                     $this->account->save();
 
-                    // Follower count is refreshed via SocialMetrics after the
-                    // token checks (see refreshFollowerCount) — no inline fetch.
+                    // Follower count is refreshed by the QueryAccountMetrics job
+                    // (metrics:scrape-accounts) — no inline fetch here.
 
                     return;
 

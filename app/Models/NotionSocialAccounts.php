@@ -45,7 +45,12 @@ class NotionSocialAccounts extends Model
         'followers',
         'followings',
         'engagement',
-        'post_count'
+        'post_count',
+        'metrics_last_scraped_at',
+    ];
+
+    protected $casts = [
+        'metrics_last_scraped_at' => 'datetime',
     ];
 
     static $slug_separator = "@";

@@ -31,6 +31,10 @@ Schedule::command('app:send-telemetry')->daily();
 // Post-publish social metrics (views/likes/etc.) — pr4w/laravel-social-metrics.
 Schedule::command('metrics:scrape')->everyMinute()->withoutOverlapping();
 
+// Account follower metrics — cadence-gated to ~once/day per account, so the
+// frequency here only controls how quickly newly-due accounts get picked up.
+Schedule::command('metrics:scrape-accounts')->everyTenMinutes()->withoutOverlapping();
+
 // 3am maintenance slot: prune Telescope, then back up the DB + files.
 Schedule::command('telescope:prune --hours=24')->dailyAt('03:00');
 Schedule::command('backup:run')->daily()->at('03:10');
