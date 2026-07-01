@@ -100,6 +100,7 @@ return [
             'r_organization_social',
             'r_organization_followers',
             'r_member_postAnalytics',
+            'r_member_profileAnalytics',
             'r_organization_social_feed',
             'r_1st_connections_size',
         ],
