@@ -25,6 +25,21 @@ import SocialIcon from '@/components/SocialIcon.vue';
 import { dashboard } from '@/routes';
 import { toastFromEnvelope } from '@/lib/notionToast';
 
+/**
+ * Single accent = blue-600, spelled out literally everywhere (Tailwind's JIT
+ * can't see `bg-${x}-600`). To re-theme, find/replace `blue-600` and its
+ * `blue-600/10` tints, or map them to your own token.
+ *
+ * Layout: a full-height muted canvas (`bg-muted/40`) with a centred, max-w-7xl
+ * content column so it never goes full-bleed on a wide monitor. Everything
+ * lives in one card — tabs in the header, data as tables in the body.
+ *
+ * Plan limits (x/y) live in the header next to the plan badge, not in the tabs
+ * (two tabs have no cap, so tab fractions would be inconsistent). Linked
+ * accounts render as a vertical list; each avatar carries a platform badge so
+ * identical avatars across networks stay distinguishable.
+ */
+
 interface SocialAccount {
     id: number;
     platform: string;
@@ -118,6 +133,41 @@ const plan = computed<SubscriptionDetails | null>(
     () => authUser.value?.subscription_details ?? null,
 );
 
+// Time-aware greeting for the welcome header.
+const greeting = computed<string>(() => {
+    const h = new Date().getHours();
+    if (h < 12) return 'Good morning';
+    if (h < 18) return 'Good afternoon';
+    return 'Good evening';
+});
+
+// A friendly one-line summary that replaces the old KPI cards.
+const summary = computed<string>(() => {
+    const dbs = props.databases.length;
+    const accts = props.socials.length;
+    const sched = props.posts.length;
+    const s = (n: number) => (n === 1 ? '' : 's');
+    return `You have ${sched} post${s(sched)} scheduled across ${dbs} database${s(dbs)} and ${accts} connected account${s(accts)}.`;
+});
+
+// Plan usage vs. limits, surfaced next to the plan badge in the header.
+const limits = computed(() =>
+    plan.value
+        ? {
+              databases: {
+                  used: props.databases.length,
+                  total: plan.value.options.databases,
+              },
+              accounts: {
+                  used: props.socials.length,
+                  total: plan.value.options.social_accounts,
+              },
+          }
+        : null,
+);
+const atLimit = (used: number, total: number): boolean =>
+    total > 0 && used >= total;
+
 type TabKey = 'databases' | 'socials' | 'posts' | 'submitted';
 const tab = ref<TabKey>('databases');
 
@@ -138,62 +188,26 @@ const tabs = computed(() => [
         key: 'databases' as const,
         label: 'Databases',
         icon: Database,
-        badge: plan.value
-            ? `${props.databases.length}/${plan.value.options.databases}`
-            : String(props.databases.length),
+        badge: String(props.databases.length),
     },
     {
         key: 'socials' as const,
-        label: 'Social Accounts',
+        label: 'Accounts',
         icon: AtSign,
-        badge: plan.value
-            ? `${props.socials.length}/${plan.value.options.social_accounts}`
-            : String(props.socials.length),
+        badge: String(props.socials.length),
     },
     {
         key: 'posts' as const,
-        label: 'Scheduled Posts',
+        label: 'Scheduled',
         icon: CalendarClock,
         badge: String(props.posts.length),
     },
     {
         key: 'submitted' as const,
-        label: 'Submitted Posts',
+        label: 'Published',
         icon: Send,
         badge:
             submittedTotal.value !== null ? String(submittedTotal.value) : null,
-    },
-]);
-
-// Top-of-page overview cards. Each gets a tinted icon chip for a bit of colour.
-const stats = computed(() => [
-    {
-        label: 'Notion databases',
-        value: props.databases.length as number | string,
-        sub: plan.value ? `of ${plan.value.options.databases}` : '',
-        icon: Database,
-        tint: 'bg-sky-500/10 text-sky-600 dark:text-sky-400',
-    },
-    {
-        label: 'Social accounts',
-        value: props.socials.length as number | string,
-        sub: plan.value ? `of ${plan.value.options.social_accounts}` : '',
-        icon: AtSign,
-        tint: 'bg-violet-500/10 text-violet-600 dark:text-violet-400',
-    },
-    {
-        label: 'Scheduled posts',
-        value: props.posts.length as number | string,
-        sub: '',
-        icon: CalendarClock,
-        tint: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
-    },
-    {
-        label: 'Published posts',
-        value: submittedTotal.value ?? '—',
-        sub: '',
-        icon: Send,
-        tint: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
     },
 ]);
 
@@ -238,8 +252,7 @@ function engagementItems(
         }));
 }
 
-// Only surface followers/posts when we actually have the data, so cards never
-// read "— followers · 0 posts".
+// Only surface followers/posts when we actually have the data.
 function socialStats(s: SocialAccount): string {
     const parts: string[] = [];
     if (typeof s.followers === 'number' && s.followers > 0)
@@ -249,30 +262,15 @@ function socialStats(s: SocialAccount): string {
     return parts.join(' · ');
 }
 
-// Stable ordering for accounts: by platform, then by name.
+// Stable ordering for accounts: by platform, then by name — so same-network
+// accounts cluster together in the linked-accounts list.
 const socialSort = (a: SocialAccount, b: SocialAccount): number =>
     a.platform.localeCompare(b.platform) ||
     (a.name ?? '').localeCompare(b.name ?? '');
 const sortAccounts = (list: SocialAccount[]): SocialAccount[] =>
     [...list].sort(socialSort);
 
-// Group accounts by platform (each group sorted by name) so the Databases tab
-// can show one column per social network.
-function groupAccounts(
-    list: SocialAccount[],
-): { platform: string; accounts: SocialAccount[] }[] {
-    const groups = new Map<string, SocialAccount[]>();
-    for (const s of sortAccounts(list)) {
-        if (!groups.has(s.platform)) groups.set(s.platform, []);
-        groups.get(s.platform)!.push(s);
-    }
-    return [...groups.entries()].map(([platform, accounts]) => ({
-        platform,
-        accounts,
-    }));
-}
-
-// Compact per-platform counts (used in the Databases tab + the social filter).
+// Compact per-platform counts (used by the account filter).
 function platformSummary(
     list: SocialAccount[],
 ): { platform: string; count: number }[] {
@@ -283,7 +281,7 @@ function platformSummary(
         .sort((a, b) => a.platform.localeCompare(b.platform));
 }
 
-// Social Accounts tab: platform filter + ordering.
+// Accounts tab: platform filter + ordering.
 const socialFilter = ref<string>('all');
 const socialPlatforms = computed(() => platformSummary(props.socials));
 const filteredSocials = computed(() => {
@@ -295,7 +293,7 @@ const filteredSocials = computed(() => {
 const filterChipClass = (p: string): string =>
     'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ' +
     (socialFilter.value === p
-        ? 'bg-primary text-primary-foreground'
+        ? 'bg-blue-600 text-white'
         : 'bg-muted text-muted-foreground hover:text-foreground');
 
 function postStatusClass(post: Post): string {
@@ -305,12 +303,15 @@ function postStatusClass(post: Post): string {
     if (['error', 'failed'].includes(s))
         return 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300';
     if (s === 'posted')
-        return 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300';
+        return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300';
     return 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300';
 }
 
 const pill =
-    'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium';
+    'inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium';
+const th =
+    'px-4 py-2.5 text-xs font-medium tracking-wide text-muted-foreground uppercase sm:px-5';
+const td = 'px-4 py-3 sm:px-5';
 
 // --- Mutations (JSON endpoints via useHttp; toasts from the envelope) ---
 const postAction = useHttp<{ id: number | null }>({ id: null });
@@ -410,8 +411,7 @@ watch(tab, (t) => {
     if (t === 'submitted' && submittedTotal.value === null) loadSubmitted(true);
 });
 
-// Pre-warm the submitted total so the "Published posts" stat shows a number on
-// load (also makes the Submitted tab instant when opened).
+// Pre-warm the submitted total so the Published tab badge shows a number on load.
 onMounted(() => loadSubmitted(true));
 
 // Surface the result of an OAuth round-trip (callback redirects here with
@@ -436,600 +436,723 @@ onMounted(() => {
 <template>
     <Head title="Dashboard" />
 
-    <div class="flex h-full flex-1 flex-col gap-5 p-4">
-        <!-- Greeting -->
-        <div class="flex flex-wrap items-end justify-between gap-3">
-            <div class="flex flex-col gap-1">
-                <h1 class="text-2xl font-bold tracking-tight">
-                    Welcome back, {{ userName }} 👋
-                </h1>
-                <p class="text-sm text-muted-foreground">
-                    Here's an overview of your Notion databases, connected
-                    accounts and scheduled posts.
-                </p>
-            </div>
-            <div v-if="plan" class="flex flex-wrap items-center gap-2 text-xs">
-                <span
-                    class="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1.5 font-semibold text-primary"
+    <!-- Full-height muted canvas -->
+    <div class="flex h-full flex-1 flex-col bg-muted/40">
+        <!-- Contained, centred content column -->
+        <div class="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:py-8">
+            <!-- Welcome header -->
+            <header class="mb-5 flex flex-wrap items-end justify-between gap-3">
+                <div>
+                    <h1
+                        class="text-xl font-semibold tracking-tight sm:text-2xl"
+                    >
+                        {{ greeting }}, {{ userName }} 👋
+                    </h1>
+                    <p class="mt-1 text-sm text-muted-foreground">
+                        {{ summary }}
+                    </p>
+                </div>
+                <div
+                    v-if="plan"
+                    class="flex flex-col items-start gap-1.5 text-xs sm:items-end"
                 >
-                    <Sparkles class="h-3.5 w-3.5" />
-                    {{ plan.details.name }} plan
-                </span>
-                <Link
-                    href="/app/pricing"
-                    class="font-medium text-primary hover:underline"
-                    >Upgrade ↗</Link
-                >
-            </div>
-        </div>
-
-        <!-- Stats overview -->
-        <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <div
-                v-for="s in stats"
-                :key="s.label"
-                class="flex items-center gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm"
-            >
-                <span
-                    class="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
-                    :class="s.tint"
-                >
-                    <component :is="s.icon" class="h-5 w-5" />
-                </span>
-                <div class="min-w-0">
-                    <div class="flex items-baseline gap-1">
-                        <span class="text-2xl font-bold tracking-tight">{{
-                            s.value
-                        }}</span>
+                    <div class="flex items-center gap-2">
                         <span
-                            v-if="s.sub"
-                            class="text-xs text-muted-foreground"
-                            >{{ s.sub }}</span
+                            class="inline-flex items-center gap-1.5 rounded-full bg-blue-600/10 px-3 py-1.5 font-semibold text-blue-600 dark:text-blue-400"
+                        >
+                            <Sparkles class="h-3.5 w-3.5" />
+                            {{ plan.details.name }} plan
+                        </span>
+                        <Link
+                            href="/app/pricing"
+                            class="inline-flex items-center rounded-full border border-border bg-card px-3 py-1.5 font-medium transition-colors hover:bg-muted"
+                            >Upgrade ↗</Link
                         >
                     </div>
                     <div
-                        class="truncate text-xs font-medium text-muted-foreground"
+                        v-if="limits"
+                        class="flex items-center gap-1.5 text-muted-foreground"
                     >
-                        {{ s.label }}
+                        <span
+                            :class="
+                                atLimit(
+                                    limits.databases.used,
+                                    limits.databases.total,
+                                )
+                                    ? 'font-medium text-amber-600 dark:text-amber-400'
+                                    : ''
+                            "
+                            >{{ limits.databases.used }}/{{
+                                limits.databases.total
+                            }}
+                            databases</span
+                        >
+                        <span class="text-muted-foreground/40">·</span>
+                        <span
+                            :class="
+                                atLimit(
+                                    limits.accounts.used,
+                                    limits.accounts.total,
+                                )
+                                    ? 'font-medium text-amber-600 dark:text-amber-400'
+                                    : ''
+                            "
+                            >{{ limits.accounts.used }}/{{
+                                limits.accounts.total
+                            }}
+                            accounts</span
+                        >
                     </div>
                 </div>
-            </div>
-        </div>
+            </header>
 
-        <!-- Tabs -->
-        <div
-            class="flex gap-1 overflow-x-auto rounded-xl border border-border bg-muted/40 p-1"
-        >
-            <button
-                v-for="t in tabs"
-                :key="t.key"
-                type="button"
-                class="inline-flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium whitespace-nowrap transition-colors"
-                :class="
-                    tab === t.key
-                        ? 'bg-background text-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground'
-                "
-                @click="tab = t.key"
-            >
-                <component :is="t.icon" class="h-4 w-4 shrink-0" />
-                {{ t.label }}
-                <span
-                    v-if="t.badge"
-                    class="ml-0.5 rounded-full px-1.5 py-0.5 text-xs"
-                    :class="
-                        tab === t.key
-                            ? 'bg-primary/10 text-primary'
-                            : 'bg-muted text-muted-foreground'
-                    "
-                    >{{ t.badge }}</span
-                >
-            </button>
-        </div>
-
-        <!-- Databases -->
-        <div v-if="tab === 'databases'" class="flex flex-col gap-3">
-            <div class="flex justify-end">
-                <AddDatabaseDialog @connected="onDatabaseConnected" />
-            </div>
+            <!-- Main card -->
             <div
-                v-if="!databases.length"
-                class="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-border bg-muted/20 p-10 text-center"
+                class="overflow-hidden rounded-xl border border-border bg-card shadow-sm"
             >
-                <Database class="h-8 w-8 text-muted-foreground/50" />
-                <p class="text-sm text-muted-foreground">
-                    No Notion databases connected yet.
-                </p>
-            </div>
-
-            <div v-else class="grid gap-4 xl:grid-cols-2">
+                <!-- Card header: tabs + per-tab primary action -->
                 <div
-                    v-for="db in databases"
-                    :key="db.id"
-                    class="@container rounded-2xl border border-border bg-card p-5 shadow-sm transition-shadow hover:shadow-md"
+                    class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border px-4 sm:px-5"
                 >
-                    <!-- Header: name + status + actions -->
-                    <div
-                        class="flex flex-wrap items-start justify-between gap-3"
-                    >
-                        <div class="flex items-start gap-3">
+                    <nav class="-mb-px flex gap-4 overflow-x-auto sm:gap-6">
+                        <button
+                            v-for="t in tabs"
+                            :key="t.key"
+                            type="button"
+                            class="inline-flex items-center gap-2 border-b-2 py-3.5 text-sm whitespace-nowrap transition-colors"
+                            :class="
+                                tab === t.key
+                                    ? 'border-blue-600 font-semibold text-blue-600 dark:text-blue-400'
+                                    : 'border-transparent font-medium text-muted-foreground hover:text-foreground'
+                            "
+                            @click="tab = t.key"
+                        >
+                            <component :is="t.icon" class="h-4 w-4 shrink-0" />
+                            {{ t.label }}
                             <span
-                                class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-sky-500/10 text-sky-600 dark:text-sky-400"
+                                v-if="t.badge"
+                                class="rounded-full px-1.5 py-0.5 text-xs"
+                                :class="
+                                    tab === t.key
+                                        ? 'bg-blue-600/10 text-blue-600 dark:text-blue-400'
+                                        : 'bg-muted text-muted-foreground'
+                                "
+                                >{{ t.badge }}</span
                             >
-                                <Database class="h-5 w-5" />
-                            </span>
-                            <div class="space-y-1.5">
-                                <div class="flex flex-wrap items-center gap-2">
-                                    <span class="font-semibold">{{
-                                        db.database_name ?? 'Untitled database'
-                                    }}</span>
-                                    <a
-                                        :href="notionUrl(db.database_id)"
-                                        target="_blank"
-                                        rel="noopener"
-                                        class="text-xs font-medium text-primary hover:underline"
-                                    >
-                                        Open in Notion ↗
-                                    </a>
-                                </div>
-                                <span
-                                    :class="[
-                                        pill,
-                                        truthy(db.is_valid)
-                                            ? 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300'
-                                            : 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300',
-                                    ]"
-                                >
-                                    {{
-                                        truthy(db.is_valid)
-                                            ? 'Connected'
-                                            : 'Needs reconnect'
-                                    }}
-                                </span>
-                            </div>
-                        </div>
-                        <div class="flex shrink-0 gap-2">
-                            <ManageDatabaseSocialsDialog
-                                :database-id="db.id"
-                                :socials="socials"
-                                @updated="onSocialsUpdated"
-                            />
-                            <Button
-                                v-if="!truthy(db.is_valid)"
-                                size="sm"
-                                variant="outline"
-                                :disabled="reconnectAction.processing"
-                                @click="reconnectDatabase(db.id)"
-                            >
-                                <RefreshCw class="h-4 w-4" />
-                                Reconnect
-                            </Button>
-                            <Button
-                                size="sm"
-                                variant="outline"
-                                :disabled="dbAction.processing"
-                                @click="removeDatabase(db.id)"
-                            >
-                                <Trash2 class="h-4 w-4" />
-                                Remove
-                            </Button>
-                        </div>
+                        </button>
+                    </nav>
+                    <div class="flex items-center py-2">
+                        <AddDatabaseDialog
+                            v-if="tab === 'databases'"
+                            @connected="onDatabaseConnected"
+                        />
+                        <AddSocialAccountDialog v-else-if="tab === 'socials'" />
                     </div>
+                </div>
 
-                    <!-- Linked accounts — grouped by platform, avatar chips -->
-                    <div class="mt-4 rounded-xl bg-muted/30 p-3">
-                        <div
-                            class="mb-2 text-xs font-semibold tracking-wide text-muted-foreground uppercase"
-                        >
-                            Linked accounts ({{ db.socials?.length ?? 0 }})
-                        </div>
-                        <p
-                            v-if="!db.socials?.length"
-                            class="text-sm text-muted-foreground"
-                        >
-                            No accounts linked yet.
+                <!-- Databases -->
+                <div v-if="tab === 'databases'">
+                    <div
+                        v-if="!databases.length"
+                        class="flex flex-col items-center gap-2 p-12 text-center"
+                    >
+                        <Database class="h-8 w-8 text-muted-foreground/50" />
+                        <p class="text-sm text-muted-foreground">
+                            No Notion databases connected yet.
                         </p>
-                        <div v-else class="space-y-3">
-                            <div
-                                v-for="group in groupAccounts(db.socials)"
-                                :key="group.platform"
-                                class="space-y-1.5"
-                            >
-                                <div
-                                    class="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+                    </div>
+                    <div v-else class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="bg-muted/40 text-left">
+                                <tr>
+                                    <th :class="th">Database</th>
+                                    <th :class="th">Linked accounts</th>
+                                    <th :class="th">Status</th>
+                                    <th :class="[th, 'text-right']">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr
+                                    v-for="db in databases"
+                                    :key="db.id"
+                                    class="border-t border-border align-top transition-colors hover:bg-muted/30"
                                 >
-                                    <SocialIcon
-                                        :platform="group.platform"
-                                        class="h-3.5 w-3.5 shrink-0"
-                                    />
-                                    {{ cap(group.platform) }}
-                                    <span class="font-normal"
-                                        >({{ group.accounts.length }})</span
-                                    >
-                                </div>
-                                <div class="flex flex-wrap gap-2">
-                                    <span
-                                        v-for="s in group.accounts"
-                                        :key="s.id"
-                                        class="inline-flex items-center gap-2 rounded-full border border-border bg-card py-1 pr-3 pl-1 text-sm shadow-sm"
-                                    >
-                                        <span class="relative shrink-0">
-                                            <img
-                                                v-if="s.profile_picture"
-                                                :src="s.profile_picture"
-                                                alt=""
-                                                class="h-6 w-6 rounded-full object-cover"
-                                            />
+                                    <td :class="td">
+                                        <div class="flex items-center gap-3">
                                             <span
-                                                v-else
-                                                class="flex h-6 w-6 items-center justify-center rounded-full bg-muted"
+                                                class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-600/10 text-blue-600 dark:text-blue-400"
                                             >
-                                                <SocialIcon
-                                                    :platform="s.platform"
-                                                    class="h-3 w-3"
-                                                />
+                                                <Database class="h-5 w-5" />
                                             </span>
+                                            <div class="min-w-0">
+                                                <div
+                                                    class="truncate font-medium"
+                                                >
+                                                    {{
+                                                        db.database_name ??
+                                                        'Untitled database'
+                                                    }}
+                                                </div>
+                                                <a
+                                                    :href="
+                                                        notionUrl(
+                                                            db.database_id,
+                                                        )
+                                                    "
+                                                    target="_blank"
+                                                    rel="noopener"
+                                                    class="text-xs text-muted-foreground hover:text-foreground hover:underline"
+                                                    >Open in Notion ↗</a
+                                                >
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td :class="td">
+                                        <ul
+                                            v-if="db.socials?.length"
+                                            class="space-y-1.5"
+                                        >
+                                            <li
+                                                v-for="s in sortAccounts(
+                                                    db.socials,
+                                                )"
+                                                :key="s.id"
+                                                class="flex items-center gap-2"
+                                            >
+                                                <span
+                                                    class="relative shrink-0"
+                                                    :title="`${s.name ?? cap(s.platform)} · ${cap(s.platform)}`"
+                                                >
+                                                    <img
+                                                        v-if="s.profile_picture"
+                                                        :src="s.profile_picture"
+                                                        alt=""
+                                                        class="h-6 w-6 rounded-full object-cover"
+                                                    />
+                                                    <span
+                                                        v-else
+                                                        class="flex h-6 w-6 items-center justify-center rounded-full bg-blue-600/10 text-blue-600 dark:text-blue-400"
+                                                    >
+                                                        <SocialIcon
+                                                            :platform="
+                                                                s.platform
+                                                            "
+                                                            class="h-3 w-3"
+                                                        />
+                                                    </span>
+                                                    <span
+                                                        class="absolute -right-1 -bottom-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-card text-muted-foreground ring-1 ring-border"
+                                                    >
+                                                        <SocialIcon
+                                                            :platform="
+                                                                s.platform
+                                                            "
+                                                            class="h-2 w-2"
+                                                        />
+                                                    </span>
+                                                </span>
+                                                <span
+                                                    class="truncate text-sm"
+                                                    >{{
+                                                        s.name ??
+                                                        cap(s.platform)
+                                                    }}</span
+                                                >
+                                                <span
+                                                    v-if="!truthy(s.is_valid)"
+                                                    class="h-1.5 w-1.5 shrink-0 rounded-full bg-red-500"
+                                                    title="Needs reconnecting"
+                                                ></span>
+                                            </li>
+                                        </ul>
+                                        <span
+                                            v-else
+                                            class="text-sm text-muted-foreground"
+                                            >No accounts linked</span
+                                        >
+                                    </td>
+                                    <td :class="td">
+                                        <span
+                                            :class="[
+                                                pill,
+                                                truthy(db.is_valid)
+                                                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                                                    : 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300',
+                                            ]"
+                                        >
                                             <span
-                                                class="absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-background"
+                                                class="h-1.5 w-1.5 rounded-full"
                                                 :class="
-                                                    truthy(s.is_valid)
-                                                        ? 'bg-green-500'
-                                                        : 'bg-red-500'
-                                                "
-                                                :title="
-                                                    truthy(s.is_valid)
-                                                        ? 'Connected'
-                                                        : 'Needs reconnecting'
+                                                    truthy(db.is_valid)
+                                                        ? 'bg-emerald-500'
+                                                        : 'bg-amber-500'
                                                 "
                                             ></span>
+                                            {{
+                                                truthy(db.is_valid)
+                                                    ? 'Connected'
+                                                    : 'Needs reconnect'
+                                            }}
                                         </span>
-                                        <span
-                                            class="max-w-[12rem] truncate font-medium"
-                                            >{{
-                                                s.name ?? cap(s.platform)
-                                            }}</span
+                                    </td>
+                                    <td :class="td">
+                                        <div
+                                            class="flex flex-wrap items-center justify-end gap-2"
                                         >
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
+                                            <ManageDatabaseSocialsDialog
+                                                :database-id="db.id"
+                                                :socials="socials"
+                                                @updated="onSocialsUpdated"
+                                            />
+                                            <Button
+                                                v-if="!truthy(db.is_valid)"
+                                                size="sm"
+                                                variant="outline"
+                                                :disabled="
+                                                    reconnectAction.processing
+                                                "
+                                                @click="
+                                                    reconnectDatabase(db.id)
+                                                "
+                                            >
+                                                <RefreshCw class="h-4 w-4" />
+                                                Reconnect
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                :disabled="dbAction.processing"
+                                                @click="removeDatabase(db.id)"
+                                            >
+                                                <Trash2 class="h-4 w-4" />
+                                                Remove
+                                            </Button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div
+                        v-if="databases.length"
+                        class="border-t border-border px-4 py-3 text-sm text-muted-foreground sm:px-5"
+                    >
+                        {{ databases.length }} database{{
+                            databases.length === 1 ? '' : 's'
+                        }}
                     </div>
                 </div>
-            </div>
-        </div>
 
-        <!-- Social accounts (card grid) -->
-        <div v-else-if="tab === 'socials'" class="flex flex-col gap-3">
-            <div class="flex flex-wrap items-center justify-between gap-2">
-                <div
-                    v-if="socials.length"
-                    class="flex flex-wrap items-center gap-1.5"
-                >
-                    <button
-                        type="button"
-                        :class="filterChipClass('all')"
-                        @click="socialFilter = 'all'"
+                <!-- Accounts -->
+                <div v-else-if="tab === 'socials'">
+                    <div
+                        v-if="socials.length"
+                        class="flex flex-wrap items-center gap-1.5 border-b border-border px-4 py-3 sm:px-5"
                     >
-                        All ({{ socials.length }})
-                    </button>
-                    <button
-                        v-for="p in socialPlatforms"
-                        :key="p.platform"
-                        type="button"
-                        :class="filterChipClass(p.platform)"
-                        @click="socialFilter = p.platform"
-                    >
-                        <SocialIcon
-                            :platform="p.platform"
-                            class="h-3.5 w-3.5"
-                        />
-                        {{ cap(p.platform) }} ({{ p.count }})
-                    </button>
-                </div>
-                <span v-else></span>
-                <AddSocialAccountDialog />
-            </div>
-            <div
-                v-if="!socials.length"
-                class="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-border bg-muted/20 p-10 text-center"
-            >
-                <AtSign class="h-8 w-8 text-muted-foreground/50" />
-                <p class="text-sm text-muted-foreground">
-                    No social accounts connected yet.
-                </p>
-            </div>
-            <div v-else class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <div
-                    v-for="s in filteredSocials"
-                    :key="s.id"
-                    class="group flex items-center gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
-                >
-                    <div class="relative shrink-0">
-                        <img
-                            v-if="s.profile_picture"
-                            :src="s.profile_picture"
-                            alt=""
-                            class="h-11 w-11 rounded-full object-cover"
-                        />
-                        <div
-                            v-else
-                            class="h-11 w-11 rounded-full bg-muted"
-                        ></div>
-                        <span
-                            class="absolute -right-0.5 -bottom-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-background ring-1 ring-border"
+                        <button
+                            type="button"
+                            :class="filterChipClass('all')"
+                            @click="socialFilter = 'all'"
+                        >
+                            All ({{ socials.length }})
+                        </button>
+                        <button
+                            v-for="p in socialPlatforms"
+                            :key="p.platform"
+                            type="button"
+                            :class="filterChipClass(p.platform)"
+                            @click="socialFilter = p.platform"
                         >
                             <SocialIcon
-                                :platform="s.platform"
-                                class="h-3 w-3"
+                                :platform="p.platform"
+                                class="h-3.5 w-3.5"
                             />
-                        </span>
+                            {{ cap(p.platform) }} ({{ p.count }})
+                        </button>
                     </div>
-                    <div class="min-w-0 flex-1">
-                        <div class="flex items-center gap-1.5">
-                            <span class="truncate font-medium">{{
-                                s.name ?? s.account_full_identifier ?? 'Account'
-                            }}</span>
-                            <span
-                                class="h-1.5 w-1.5 shrink-0 rounded-full"
-                                :class="
-                                    truthy(s.is_valid)
-                                        ? 'bg-green-500'
-                                        : 'bg-red-500'
-                                "
-                                :title="
-                                    truthy(s.is_valid)
-                                        ? 'Active'
-                                        : 'Needs attention'
-                                "
-                            ></span>
-                        </div>
-                        <div
-                            class="mt-0.5 truncate text-xs text-muted-foreground"
-                        >
-                            {{ socialStats(s) || cap(s.platform) }}
-                        </div>
-                    </div>
-                    <Button
-                        size="sm"
-                        variant="outline"
-                        class="shrink-0"
-                        :disabled="socialAction.processing"
-                        @click="removeSocial(s.id)"
+                    <div
+                        v-if="!socials.length"
+                        class="flex flex-col items-center gap-2 p-12 text-center"
                     >
-                        <Trash2 class="h-4 w-4" />
-                        Remove
-                    </Button>
+                        <AtSign class="h-8 w-8 text-muted-foreground/50" />
+                        <p class="text-sm text-muted-foreground">
+                            No social accounts connected yet.
+                        </p>
+                    </div>
+                    <div v-else class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="bg-muted/40 text-left">
+                                <tr>
+                                    <th :class="th">Account</th>
+                                    <th :class="th">Platform</th>
+                                    <th :class="th">Audience</th>
+                                    <th :class="th">Status</th>
+                                    <th :class="[th, 'text-right']">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr
+                                    v-for="s in filteredSocials"
+                                    :key="s.id"
+                                    class="border-t border-border transition-colors hover:bg-muted/30"
+                                >
+                                    <td :class="td">
+                                        <div class="flex items-center gap-3">
+                                            <div class="relative shrink-0">
+                                                <img
+                                                    v-if="s.profile_picture"
+                                                    :src="s.profile_picture"
+                                                    alt=""
+                                                    class="h-9 w-9 rounded-full object-cover"
+                                                />
+                                                <span
+                                                    v-else
+                                                    class="flex h-9 w-9 items-center justify-center rounded-full bg-blue-600/10 text-blue-600 dark:text-blue-400"
+                                                >
+                                                    <SocialIcon
+                                                        :platform="s.platform"
+                                                        class="h-4 w-4"
+                                                    />
+                                                </span>
+                                            </div>
+                                            <div class="min-w-0">
+                                                <div
+                                                    class="truncate font-medium"
+                                                >
+                                                    {{
+                                                        s.name ??
+                                                        s.account_full_identifier ??
+                                                        'Account'
+                                                    }}
+                                                </div>
+                                                <div
+                                                    v-if="
+                                                        s.account_full_identifier &&
+                                                        s.name
+                                                    "
+                                                    class="truncate text-xs text-muted-foreground"
+                                                >
+                                                    {{
+                                                        s.account_full_identifier
+                                                    }}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td :class="td">
+                                        <span
+                                            class="inline-flex items-center gap-1.5 text-muted-foreground"
+                                        >
+                                            <SocialIcon
+                                                :platform="s.platform"
+                                                class="h-4 w-4"
+                                            />
+                                            {{ cap(s.platform) }}
+                                        </span>
+                                    </td>
+                                    <td :class="[td, 'text-muted-foreground']">
+                                        {{ socialStats(s) || '—' }}
+                                    </td>
+                                    <td :class="td">
+                                        <span
+                                            :class="[
+                                                pill,
+                                                truthy(s.is_valid)
+                                                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                                                    : 'bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300',
+                                            ]"
+                                        >
+                                            <span
+                                                class="h-1.5 w-1.5 rounded-full"
+                                                :class="
+                                                    truthy(s.is_valid)
+                                                        ? 'bg-emerald-500'
+                                                        : 'bg-red-500'
+                                                "
+                                            ></span>
+                                            {{
+                                                truthy(s.is_valid)
+                                                    ? 'Active'
+                                                    : 'Needs attention'
+                                            }}
+                                        </span>
+                                    </td>
+                                    <td :class="td">
+                                        <div class="flex justify-end">
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                :disabled="
+                                                    socialAction.processing
+                                                "
+                                                @click="removeSocial(s.id)"
+                                            >
+                                                <Trash2 class="h-4 w-4" />
+                                                Remove
+                                            </Button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div
+                        v-if="socials.length"
+                        class="border-t border-border px-4 py-3 text-sm text-muted-foreground sm:px-5"
+                    >
+                        {{ filteredSocials.length }} account{{
+                            filteredSocials.length === 1 ? '' : 's'
+                        }}
+                    </div>
                 </div>
-            </div>
-        </div>
 
-        <!-- Scheduled posts -->
-        <div
-            v-else-if="tab === 'posts'"
-            class="overflow-x-auto rounded-2xl border border-border bg-card shadow-sm"
-        >
-            <table class="w-full text-sm">
-                <thead
-                    class="bg-muted/50 text-left text-xs tracking-wide text-muted-foreground uppercase"
-                >
-                    <tr>
-                        <th class="px-4 py-2 font-medium">Post</th>
-                        <th class="px-4 py-2 font-medium">Account</th>
-                        <th class="px-4 py-2 font-medium">Scheduled</th>
-                        <th class="px-4 py-2 font-medium">Status</th>
-                        <th class="px-4 py-2 text-right font-medium">
-                            Actions
-                        </th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr v-if="!posts.length">
-                        <td
-                            colspan="5"
-                            class="px-4 py-8 text-center text-muted-foreground"
-                        >
-                            No scheduled posts.
-                        </td>
-                    </tr>
-                    <tr
-                        v-for="p in posts"
-                        :key="p.id"
-                        class="border-t border-border transition-colors hover:bg-muted/40"
+                <!-- Scheduled posts -->
+                <div v-else-if="tab === 'posts'">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="bg-muted/40 text-left">
+                                <tr>
+                                    <th :class="th">Post</th>
+                                    <th :class="th">Account</th>
+                                    <th :class="th">Scheduled</th>
+                                    <th :class="th">Status</th>
+                                    <th :class="[th, 'text-right']">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-if="!posts.length">
+                                    <td
+                                        colspan="5"
+                                        class="px-5 py-12 text-center text-muted-foreground"
+                                    >
+                                        No scheduled posts.
+                                    </td>
+                                </tr>
+                                <tr
+                                    v-for="p in posts"
+                                    :key="p.id"
+                                    class="border-t border-border transition-colors hover:bg-muted/30"
+                                >
+                                    <td :class="[td, 'font-medium']">
+                                        <div class="flex items-center gap-2">
+                                            <SocialIcon
+                                                :platform="p.platform"
+                                                class="h-4 w-4 shrink-0"
+                                            />
+                                            <a
+                                                v-if="p.permalink"
+                                                :href="p.permalink"
+                                                target="_blank"
+                                                rel="noopener"
+                                                class="hover:underline"
+                                            >
+                                                {{
+                                                    p.post_name ??
+                                                    'Untitled post'
+                                                }}
+                                            </a>
+                                            <span v-else>{{
+                                                p.post_name ?? 'Untitled post'
+                                            }}</span>
+                                            <a
+                                                v-if="p.post_page_id"
+                                                :href="
+                                                    notionUrl(p.post_page_id)
+                                                "
+                                                target="_blank"
+                                                rel="noopener"
+                                                class="text-xs font-medium text-blue-600 hover:underline dark:text-blue-400"
+                                                >Notion ↗</a
+                                            >
+                                        </div>
+                                    </td>
+                                    <td :class="td">
+                                        {{ accountName(p.account_id) }}
+                                    </td>
+                                    <td :class="[td, 'whitespace-nowrap']">
+                                        {{ fmtDate(p.scheduled_date) }}
+                                    </td>
+                                    <td :class="td">
+                                        <span
+                                            :class="[pill, postStatusClass(p)]"
+                                            >{{
+                                                truthy(p.in_flight)
+                                                    ? 'In flight'
+                                                    : cap(p.status)
+                                            }}</span
+                                        >
+                                    </td>
+                                    <td :class="td">
+                                        <div class="flex justify-end">
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                :disabled="
+                                                    postAction.processing
+                                                "
+                                                @click="deletePost(p.id)"
+                                            >
+                                                <Trash2 class="h-4 w-4" />
+                                                Remove
+                                            </Button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div
+                        v-if="posts.length"
+                        class="border-t border-border px-4 py-3 text-sm text-muted-foreground sm:px-5"
                     >
-                        <td class="px-4 py-3 font-medium">
-                            <div class="flex items-center gap-2">
-                                <SocialIcon
-                                    :platform="p.platform"
-                                    class="h-4 w-4 shrink-0"
-                                />
-                                <a
-                                    v-if="p.permalink"
-                                    :href="p.permalink"
-                                    target="_blank"
-                                    rel="noopener"
-                                    class="hover:underline"
-                                >
-                                    {{ p.post_name ?? 'Untitled post' }}
-                                </a>
-                                <span v-else>{{
-                                    p.post_name ?? 'Untitled post'
-                                }}</span>
-                                <a
-                                    v-if="p.post_page_id"
-                                    :href="notionUrl(p.post_page_id)"
-                                    target="_blank"
-                                    rel="noopener"
-                                    class="text-xs font-medium text-primary hover:underline"
-                                    >Notion ↗</a
-                                >
-                            </div>
-                        </td>
-                        <td class="px-4 py-3">
-                            {{ accountName(p.account_id) }}
-                        </td>
-                        <td class="px-4 py-3 whitespace-nowrap">
-                            {{ fmtDate(p.scheduled_date) }}
-                        </td>
-                        <td class="px-4 py-3">
-                            <span :class="[pill, postStatusClass(p)]">{{
-                                truthy(p.in_flight)
-                                    ? 'In flight'
-                                    : cap(p.status)
-                            }}</span>
-                        </td>
-                        <td class="px-4 py-3">
-                            <div class="flex justify-end">
-                                <Button
-                                    size="sm"
-                                    variant="outline"
-                                    :disabled="postAction.processing"
-                                    @click="deletePost(p.id)"
-                                >
-                                    <Trash2 class="h-4 w-4" />
-                                    Remove
-                                </Button>
-                            </div>
-                        </td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
+                        {{ posts.length }} scheduled post{{
+                            posts.length === 1 ? '' : 's'
+                        }}
+                    </div>
+                </div>
 
-        <!-- Submitted posts -->
-        <div v-else class="flex flex-col gap-3">
-            <div
-                class="overflow-x-auto rounded-2xl border border-border bg-card shadow-sm"
-            >
-                <table class="w-full text-sm">
-                    <thead
-                        class="bg-muted/50 text-left text-xs tracking-wide text-muted-foreground uppercase"
-                    >
-                        <tr>
-                            <th class="px-4 py-2 font-medium">Post</th>
-                            <th class="px-4 py-2 font-medium">Account</th>
-                            <th class="px-4 py-2 font-medium">Posted</th>
-                            <th class="px-4 py-2 font-medium">Engagement</th>
-                            <th class="px-4 py-2 font-medium">Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr
-                            v-if="
-                                submittedHttp.processing &&
-                                !submitted.items.length
-                            "
-                        >
-                            <td
-                                colspan="5"
-                                class="px-4 py-8 text-center text-muted-foreground"
-                            >
-                                Loading…
-                            </td>
-                        </tr>
-                        <tr v-else-if="!submitted.items.length">
-                            <td
-                                colspan="5"
-                                class="px-4 py-8 text-center text-muted-foreground"
-                            >
-                                No submitted posts yet.
-                            </td>
-                        </tr>
-                        <tr
-                            v-for="p in submitted.items"
-                            :key="p.id"
-                            class="border-t border-border transition-colors hover:bg-muted/40"
-                        >
-                            <td class="px-4 py-3 font-medium">
-                                <div class="flex items-center gap-2">
-                                    <SocialIcon
-                                        :platform="p.platform"
-                                        class="h-4 w-4 shrink-0"
-                                    />
-                                    <a
-                                        v-if="p.permalink"
-                                        :href="p.permalink"
-                                        target="_blank"
-                                        rel="noopener"
-                                        class="hover:underline"
-                                    >
-                                        {{ p.post_name ?? 'Untitled post' }}
-                                    </a>
-                                    <span v-else>{{
-                                        p.post_name ?? 'Untitled post'
-                                    }}</span>
-                                    <a
-                                        v-if="p.post_page_id"
-                                        :href="notionUrl(p.post_page_id)"
-                                        target="_blank"
-                                        rel="noopener"
-                                        class="text-xs font-medium text-primary hover:underline"
-                                        >Notion ↗</a
-                                    >
-                                </div>
-                            </td>
-                            <td class="px-4 py-3">
-                                {{ submittedAccountName(p.account_id) }}
-                            </td>
-                            <td class="px-4 py-3 whitespace-nowrap">
-                                {{ fmtDate(p.posted_date) }}
-                            </td>
-                            <td class="px-4 py-3">
-                                <div
+                <!-- Published posts -->
+                <div v-else>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead class="bg-muted/40 text-left">
+                                <tr>
+                                    <th :class="th">Post</th>
+                                    <th :class="th">Account</th>
+                                    <th :class="th">Posted</th>
+                                    <th :class="th">Engagement</th>
+                                    <th :class="th">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr
                                     v-if="
-                                        engagementItems(p.latest_metrics).length
+                                        submittedHttp.processing &&
+                                        !submitted.items.length
                                     "
-                                    class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs"
                                 >
-                                    <span
-                                        v-for="e in engagementItems(
-                                            p.latest_metrics,
-                                        )"
-                                        :key="e.label"
-                                        class="inline-flex items-center gap-1"
-                                        :title="e.label"
+                                    <td
+                                        colspan="5"
+                                        class="px-5 py-12 text-center text-muted-foreground"
                                     >
-                                        <component
-                                            :is="e.icon"
-                                            class="h-3.5 w-3.5 text-muted-foreground"
-                                        />
-                                        {{ fmtNum(e.value) }}
-                                    </span>
-                                </div>
-                                <span v-else class="text-muted-foreground"
-                                    >—</span
+                                        Loading…
+                                    </td>
+                                </tr>
+                                <tr v-else-if="!submitted.items.length">
+                                    <td
+                                        colspan="5"
+                                        class="px-5 py-12 text-center text-muted-foreground"
+                                    >
+                                        No submitted posts yet.
+                                    </td>
+                                </tr>
+                                <tr
+                                    v-for="p in submitted.items"
+                                    :key="p.id"
+                                    class="border-t border-border transition-colors hover:bg-muted/30"
                                 >
-                            </td>
-                            <td class="px-4 py-3">
-                                <span
-                                    :class="[
-                                        pill,
-                                        'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300',
-                                    ]"
-                                    >Posted</span
-                                >
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-            <div
-                v-if="submittedTotal !== null"
-                class="flex items-center justify-between text-sm text-muted-foreground"
-            >
-                <span
-                    >Showing {{ submitted.items.length }} of
-                    {{ submittedTotal }}</span
-                >
-                <Button
-                    v-if="submittedPage < submitted.lastPage"
-                    size="sm"
-                    variant="outline"
-                    :disabled="submittedHttp.processing"
-                    @click="loadSubmitted(false)"
-                >
-                    <ChevronDown class="h-4 w-4" />
-                    Load more
-                </Button>
+                                    <td :class="[td, 'font-medium']">
+                                        <div class="flex items-center gap-2">
+                                            <SocialIcon
+                                                :platform="p.platform"
+                                                class="h-4 w-4 shrink-0"
+                                            />
+                                            <a
+                                                v-if="p.permalink"
+                                                :href="p.permalink"
+                                                target="_blank"
+                                                rel="noopener"
+                                                class="hover:underline"
+                                            >
+                                                {{
+                                                    p.post_name ??
+                                                    'Untitled post'
+                                                }}
+                                            </a>
+                                            <span v-else>{{
+                                                p.post_name ?? 'Untitled post'
+                                            }}</span>
+                                            <a
+                                                v-if="p.post_page_id"
+                                                :href="
+                                                    notionUrl(p.post_page_id)
+                                                "
+                                                target="_blank"
+                                                rel="noopener"
+                                                class="text-xs font-medium text-blue-600 hover:underline dark:text-blue-400"
+                                                >Notion ↗</a
+                                            >
+                                        </div>
+                                    </td>
+                                    <td :class="td">
+                                        {{ submittedAccountName(p.account_id) }}
+                                    </td>
+                                    <td :class="[td, 'whitespace-nowrap']">
+                                        {{ fmtDate(p.posted_date) }}
+                                    </td>
+                                    <td :class="td">
+                                        <div
+                                            v-if="
+                                                engagementItems(
+                                                    p.latest_metrics,
+                                                ).length
+                                            "
+                                            class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs"
+                                        >
+                                            <span
+                                                v-for="e in engagementItems(
+                                                    p.latest_metrics,
+                                                )"
+                                                :key="e.label"
+                                                class="inline-flex items-center gap-1"
+                                                :title="e.label"
+                                            >
+                                                <component
+                                                    :is="e.icon"
+                                                    class="h-3.5 w-3.5 text-muted-foreground"
+                                                />
+                                                {{ fmtNum(e.value) }}
+                                            </span>
+                                        </div>
+                                        <span
+                                            v-else
+                                            class="text-muted-foreground"
+                                            >—</span
+                                        >
+                                    </td>
+                                    <td :class="td">
+                                        <span
+                                            :class="[
+                                                pill,
+                                                'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300',
+                                            ]"
+                                            >Posted</span
+                                        >
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div
+                        v-if="submittedTotal !== null"
+                        class="flex items-center justify-between gap-3 border-t border-border px-4 py-3 text-sm text-muted-foreground sm:px-5"
+                    >
+                        <span
+                            >Showing {{ submitted.items.length }} of
+                            {{ submittedTotal }}</span
+                        >
+                        <Button
+                            v-if="submittedPage < submitted.lastPage"
+                            size="sm"
+                            variant="outline"
+                            :disabled="submittedHttp.processing"
+                            @click="loadSubmitted(false)"
+                        >
+                            <ChevronDown class="h-4 w-4" />
+                            Load more
+                        </Button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
