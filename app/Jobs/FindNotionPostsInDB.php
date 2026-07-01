@@ -277,11 +277,21 @@ class FindNotionPostsInDB implements ShouldQueue, ShouldBeUnique
                                     // Check if the date is in the future
                                     if (!$check->isFuture()) {
                                         try {
-                                            if ($check->lt(now()->subWeek())) {
+                                            // A manual re-tick of a post that's stuck mid-flight (or
+                                            // errored) is an explicit "retry this", so don't let a stale
+                                            // scheduled date block the recovery: the re-processing below
+                                            // resets it to 'scheduled' + in_flight=0 so perform-posts
+                                            // picks it up again.
+                                            $existing = NotionPosts::where('post_page_id', $page->id)->first();
+                                            $is_stuck_retry = $existing
+                                                && !$existing->posted_date
+                                                && ($existing->in_flight || in_array($existing->status, ['processing', 'slow_processing', 'processing_part2', 'error']));
+
+                                            if ($check->lt(now()->subWeek()) && !$is_stuck_retry) {
                                                 // Post is scheduled for over a week ago, so lets spit an error
                                                 $errors[] = "Your post was scheduled to be posted in the past. Please use a date set in the future.";
                                             } else {
-                                                // Post is scheduled for recently, so lets just post it anyway
+                                                // Post is scheduled for recently (or is a stuck retry), so lets just post it anyway
                                                 // Log::info("Date is NOT more than a week ago, so lets continue");
                                             }
                                         } catch (\Throwable $e) {
