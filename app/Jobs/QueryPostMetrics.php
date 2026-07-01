@@ -172,13 +172,6 @@ class QueryPostMetrics implements ShouldQueue
             return;
         }
 
-        // BETA gate: only mirror analytics into Notion for beta users while we settle
-        // on column names/behaviour. Everyone else still gets their metrics saved
-        // locally above — we just don't touch their Notion databases yet.
-        if (! NotionDatabases::isBetaUser($database->userid)) {
-            return;
-        }
-
         // Map each stored Notion property ID -> its latest value (null clears the cell).
         $columns = [
             'column_metric_views'    => $metrics->views,

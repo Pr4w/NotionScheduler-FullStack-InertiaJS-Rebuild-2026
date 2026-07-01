@@ -54,10 +54,37 @@ class ProcessNotionPost implements ShouldQueue
                 'post_name' => $this->post->post_name,
             ]);
 
+            // Atomically claim this post so a duplicate dispatch can't run in parallel.
+            // performPosts selects on (status='scheduled', in_flight=0); in_flight used
+            // to be set only at the END of this job, so while we did the slow Notion
+            // fetches below, the next scheduler tick would re-select the same post and
+            // dispatch a second copy — which is how one post ended up uploaded multiple
+            // times. The conditional UPDATE is a single atomic statement, so exactly one
+            // of the competing jobs flips in_flight and the losers bail here.
+            //
+            // Only claim on the first attempt: a released/retried job (see the catch's
+            // release(120)) already owns the claim and must be allowed to proceed.
+            if ($this->attempts() === 1) {
+                $claimed = NotionPosts::where('id', $this->post->id)
+                    ->where('in_flight', 0)
+                    ->update(['in_flight' => 1, 'in_flight_start' => Carbon::now()]);
+
+                if (! $claimed) {
+                    Log::info('Post '.$this->post->id.' is already in flight — skipping duplicate dispatch.');
+
+                    return;
+                }
+
+                // Keep the in-memory model in sync with the claim we just persisted.
+                $this->post->in_flight = 1;
+                $this->post->in_flight_start = Carbon::now();
+            }
+
             // Check if the user posting is active or valid
             if (! $this->post->user->is_active) {
                 Log::info('User '.$this->post->user->id.' is no longer active, lets not perform his post');
                 $this->post->status = 'error';
+                $this->post->in_flight = 0;
                 $this->post->save();
 
                 return;
@@ -74,6 +101,7 @@ class ProcessNotionPost implements ShouldQueue
                 Log::debug($this->post);
                 Log::debug($this->post->user->id);
                 $this->post->status = 'error';
+                $this->post->in_flight = 0;
                 $this->post->save();
                 throw new \Exception('Could not find database with ID');
             }
@@ -144,6 +172,10 @@ class ProcessNotionPost implements ShouldQueue
                 } else {
                     Log::info('Date is AFTER NOW, so just update and return');
                     $this->post->scheduled_date = $date;
+                    // Release the claim: the post stays 'scheduled' for a future run, so
+                    // it must be re-selectable by performPosts once its time comes.
+                    $this->post->in_flight = 0;
+                    $this->post->in_flight_start = null;
                     $this->post->save();
 
                     return;
@@ -204,10 +236,17 @@ class ProcessNotionPost implements ShouldQueue
             if (! $social_account) {
                 $this->fail('ERR122 - No corresponding social account found for post -> account_id');
 
+                // Release the claim so a later run can retry once the account exists.
+                $this->post->in_flight = 0;
+                $this->post->in_flight_start = null;
+                $this->post->save();
+
                 return;
             }
 
-            // Looks like we're all good to go
+            // Looks like we're all good to go. in_flight was already claimed atomically
+            // at the top of this method, so there's nothing more to flag here — the post
+            // stays in flight until UploadMedia finishes (or the reaper releases it).
             UploadMedia::dispatch(
                 $this->post,
                 $social_account,
@@ -215,11 +254,6 @@ class ProcessNotionPost implements ShouldQueue
                 $media,
                 $thumbnail
             );
-
-            // Update
-            $this->post->in_flight = 1;
-            $this->post->in_flight_start = Carbon::now();
-            $this->post->save();
 
         } catch (\Exception $e) {
 
@@ -256,5 +290,19 @@ class ProcessNotionPost implements ShouldQueue
             }
 
         }
+    }
+
+    /**
+     * Release the in_flight claim if the job fails outright (exhausted retries or an
+     * uncaught throwable). Without this, a post we claimed at the top of handle() would
+     * stay in_flight = 1 forever — the reaper only rescues 'processing*' statuses, not a
+     * claimed-but-still-'scheduled' post — so it would never be picked up again.
+     */
+    public function failed(?\Throwable $exception): void
+    {
+        Log::info('ProcessNotionPost failed for post '.$this->post->id.' — releasing in_flight claim.');
+
+        NotionPosts::where('id', $this->post->id)
+            ->update(['in_flight' => 0, 'in_flight_start' => null]);
     }
 }

@@ -80,8 +80,8 @@ class CorrectNotionDatabaseScaffolding implements ShouldQueue, ShouldBeUnique
             $slugs = NotionSocialAccounts::getAllSlugsFromUser($this->database->id, $userid);
             $slug_keys = array_keys($slugs);
 
-            // Get default scaffolding (beta users also get the trial columns)
-            $scaffolding = NotionDatabases::getDefaultScaffolding($this->database->userid);
+            // Get default scaffolding
+            $scaffolding = NotionDatabases::getDefaultScaffolding();
 
             // Array of unfound elements
             $unfound_columns = [];
@@ -431,7 +431,24 @@ class CorrectNotionDatabaseScaffolding implements ShouldQueue, ShouldBeUnique
                 // Save the DB
                 $database = $notion->databases()->update($database);
 
-                // NOTE - 
+                // Re-capture the LIVE Notion property IDs now that the create/patch has
+                // actually been applied. Columns we just created only receive their real
+                // ID from Notion *here*, on the object update() returns — before this call
+                // an added property carries an empty ID. The earlier id-capture pass runs
+                // pre-update, so without this a freshly-created column would persist an
+                // empty string first and only pick up its real ID on the *next* run. This
+                // makes it single-run.
+                foreach ($scaffolding['properties'] as $element) {
+                    try {
+                        $column = $element['column'];
+                        $this->database->$column = $database->properties()
+                            ->get($element['name'])->metadata()->id;
+                    } catch (\Exception $e) {
+                        // Still missing post-update (shouldn't happen) — leave the existing value.
+                    }
+                }
+
+                // NOTE -
                 // Perform a save on our social media accounts
                 // $select = $database->properties()->get(
                 //     $scaffolding['properties']['social_accounts']['name']
