@@ -2,6 +2,10 @@
 
 namespace App\Jobs;
 
+use App\Jobs\CorrectNotionDatabaseScaffolding;
+use App\Models\NotionDatabases;
+use App\Models\NotionErrorManager;
+use App\Models\NotionHttp;
 use App\Models\NotionPostLatestMetric;
 use App\Models\NotionPostMetric;
 use App\Models\NotionPosts;
@@ -146,7 +150,82 @@ class QueryPostMetrics implements ShouldQueue
         $post->metrics_last_scraped_at = $now;
         $post->save();
 
-        // v2: uncomment once scraping is verified.
-        // SyncPostMetricsToNotion::dispatch($post);
+        // Mirror the latest numbers into the user's Notion database (best-effort).
+        $this->pushMetricsToNotion($post, $metrics);
+    }
+
+    /**
+     * Push the latest metric values into the post's Notion page.
+     *
+     * Best-effort: the numbers are already saved locally, so a Notion failure here
+     * never fails the job. Errors are routed through NotionErrorManager, which marks
+     * the post/database invalid when the page or database is gone, and tells us to
+     * repair the scaffolding when a managed column has drifted or is missing.
+     */
+    private function pushMetricsToNotion(NotionPosts $post, $metrics): void
+    {
+        $database = NotionDatabases::with('token')->find($post->database_id);
+
+        // Nothing we can safely write to.
+        if (! $database || ! $database->is_valid || blank($post->post_page_id)
+            || ! $database->token || blank($database->token->token)) {
+            return;
+        }
+
+        // BETA gate: only mirror analytics into Notion for beta users while we settle
+        // on column names/behaviour. Everyone else still gets their metrics saved
+        // locally above — we just don't touch their Notion databases yet.
+        if (! NotionDatabases::isBetaUser($database->userid)) {
+            return;
+        }
+
+        // Map each stored Notion property ID -> its latest value (null clears the cell).
+        $columns = [
+            'column_metric_views'    => $metrics->views,
+            'column_metric_likes'    => $metrics->likes,
+            'column_metric_comments' => $metrics->comments,
+            'column_metric_shares'   => $metrics->shares,
+            'column_metric_saves'    => $metrics->saves,
+        ];
+
+        $byId = [];
+        foreach ($columns as $column => $value) {
+            $propId = $database->$column;
+            if (filled($propId)) {
+                $byId[$propId] = $value;
+            }
+        }
+
+        // Columns aren't scaffolded yet — create them, then let the next scrape write.
+        if (empty($byId)) {
+            CorrectNotionDatabaseScaffolding::dispatch($database);
+
+            return;
+        }
+
+        try {
+            (new NotionHttp(
+                ['userid' => $database->userid, 'post_id' => $post->id, 'database_id' => $database->id],
+                $database->token->token,
+                $post->post_page_id,
+            ))->markPostMetrics($byId);
+        } catch (\Throwable $e) {
+            $outcome = NotionErrorManager::manageError(
+                $database->userid,
+                $e,
+                $database->token->token,
+                'QueryPostMetrics::pushMetricsToNotion',
+                $database->id,
+                $post->id,
+            );
+
+            // A drifted/missing managed column: rebuild the scaffolding, then it heals next run.
+            if (($outcome['action'] ?? null) === 'correct_scaffolding') {
+                CorrectNotionDatabaseScaffolding::dispatch($database);
+            }
+
+            // Otherwise manageError has already flagged the post/database where relevant.
+            // The metrics are saved locally regardless — the Notion mirror is best-effort.
+        }
     }
 }

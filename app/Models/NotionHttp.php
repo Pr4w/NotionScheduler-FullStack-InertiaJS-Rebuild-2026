@@ -77,6 +77,8 @@ class NotionHttp extends Model
                 Log::info("Adding a post to the scheduler for user (" . $this->userid . ")...");
             } elseif ($this->whatdo == 'reset') {
                 Log::info("Reseting a post to initial status");
+            } elseif ($this->whatdo == 'metrics') {
+                Log::info("Pushing post analytics to Notion for user (" . $this->userid . ")");
             } else {
                 Log::warning("Unknown 'whatdo'");
                 Log::info($this->whatdo);
@@ -196,6 +198,33 @@ class NotionHttp extends Model
         return [
             'name' => $this->scaffolding['properties']['notion_status']['sub_options'][$key]['name']
         ];
+    }
+
+    // NOTE - Metrics push
+    // $metrics is keyed by Notion property ID => numeric value (null clears the cell).
+    // We key by property ID (not name) so this survives column renames and needs no
+    // extra database fetch — Notion's page PATCH accepts the id as the property key.
+    public function markPostMetrics(array $metrics) {
+        $this->whatdo = 'metrics';
+
+        $patch = [];
+        foreach ($metrics as $propertyId => $value) {
+            if (empty($propertyId)) {
+                continue; // column not scaffolded yet — skip it
+            }
+            $patch[$propertyId] = [
+                'number' => is_null($value) ? null : $value,
+            ];
+        }
+
+        // Nothing safe to write — don't fire an empty PATCH.
+        if (empty($patch)) {
+            return true;
+        }
+
+        $this->patch_data = $patch;
+
+        return $this->patchPage();
     }
 
     // NOTE - Reset the post

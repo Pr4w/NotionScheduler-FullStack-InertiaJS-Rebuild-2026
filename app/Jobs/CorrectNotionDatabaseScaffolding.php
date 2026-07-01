@@ -80,8 +80,8 @@ class CorrectNotionDatabaseScaffolding implements ShouldQueue, ShouldBeUnique
             $slugs = NotionSocialAccounts::getAllSlugsFromUser($this->database->id, $userid);
             $slug_keys = array_keys($slugs);
 
-            // Get default scaffolding
-            $scaffolding = NotionDatabases::getDefaultScaffolding();
+            // Get default scaffolding (beta users also get the trial columns)
+            $scaffolding = NotionDatabases::getDefaultScaffolding($this->database->userid);
 
             // Array of unfound elements
             $unfound_columns = [];

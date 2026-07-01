@@ -118,7 +118,7 @@ class NotionDatabases extends Model
                 'column' => 'column_ns_comments'
             ],
         ]
-        
+
         // '' => [
         //     'name' => '',
         //     'type' => ''
@@ -127,9 +127,76 @@ class NotionDatabases extends Model
 
     ];
 
+    /**
+     * BETA scaffolding — properties still being trialled before a wider rollout.
+     * These are only merged into the live scaffolding for the beta user (id 1), so
+     * column names/types can be tweaked here without touching everyone's databases.
+     *
+     * Analytics columns: we scrape post metrics and push them back into these.
+     * Branded names avoid colliding with a user's own columns (the scaffolding
+     * matches by name). "Comment Count" is distinct from "NotionScheduler Comments".
+     */
+    static $betaScaffolding = [
+        'metric_views' => [
+            'name' => '.👀 Views',
+            'type' => 'number',
+            'notion_type' => "\\Notion\\Databases\\Properties\\Number",
+            'column' => 'column_metric_views'
+        ],
+        'metric_likes' => [
+            'name' => '.❤️ Likes',
+            'type' => 'number',
+            'notion_type' => "\\Notion\\Databases\\Properties\\Number",
+            'column' => 'column_metric_likes'
+        ],
+        'metric_comments' => [
+            'name' => '.💬 Comments',
+            'type' => 'number',
+            'notion_type' => "\\Notion\\Databases\\Properties\\Number",
+            'column' => 'column_metric_comments'
+        ],
+        'metric_shares' => [
+            'name' => '.🔁 Shares',
+            'type' => 'number',
+            'notion_type' => "\\Notion\\Databases\\Properties\\Number",
+            'column' => 'column_metric_shares'
+        ],
+        'metric_saves' => [
+            'name' => '.💾 Saves',
+            'type' => 'number',
+            'notion_type' => "\\Notion\\Databases\\Properties\\Number",
+            'column' => 'column_metric_saves'
+        ],
+    ];
 
-    public static function getDefaultScaffolding() {
-        return self::$scaffolding;
+    /**
+     * The user ids that receive beta scaffolding. Keep this tiny until we're happy
+     * with the column names/behaviour, then fold $betaScaffolding into $scaffolding
+     * for everyone.
+     */
+    const BETA_USER_IDS = [1];
+
+    public static function isBetaUser($userId): bool
+    {
+        return $userId !== null && in_array((int) $userId, self::BETA_USER_IDS, true);
+    }
+
+    /**
+     * @param  int|null  $userId  When this is a beta user, the beta properties are
+     *                            merged in. Omit it (or pass a non-beta id) to get
+     *                            the stable scaffolding everyone else sees.
+     */
+    public static function getDefaultScaffolding($userId = null) {
+        $scaffolding = self::$scaffolding;
+
+        if (self::isBetaUser($userId)) {
+            $scaffolding['properties'] = array_merge(
+                $scaffolding['properties'],
+                self::$betaScaffolding,
+            );
+        }
+
+        return $scaffolding;
     }
 
     public static function getDefaultScaffoldingForScheduledOptions() {
