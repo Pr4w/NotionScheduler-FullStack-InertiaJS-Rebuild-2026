@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\Users\Tables;
 
+use App\Filament\Pages\UserDebug;
+use Filament\Actions\Action;
 use Filament\Actions\BulkActionGroup;
 use Filament\Actions\DeleteBulkAction;
 use Filament\Actions\EditAction;
@@ -57,6 +59,11 @@ class UsersTable
                 //
             ])
             ->recordActions([
+                Action::make('inspect')
+                    ->label('Inspect')
+                    ->icon('heroicon-o-bug-ant')
+                    ->color('gray')
+                    ->url(fn ($record): string => UserDebug::getUrl().'?user='.$record->id),
                 Impersonate::make()
                     ->redirectTo(route('dashboard'))
                     ->withoutSpa(),
