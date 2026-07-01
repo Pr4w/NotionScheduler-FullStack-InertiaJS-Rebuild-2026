@@ -857,7 +857,7 @@ onMounted(() => {
                                                         'Account'
                                                     }}
                                                 </div>
-                                                <div
+                                                <!-- <div
                                                     v-if="
                                                         s.account_full_identifier &&
                                                         s.name
@@ -867,7 +867,7 @@ onMounted(() => {
                                                     {{
                                                         s.account_full_identifier
                                                     }}
-                                                </div>
+                                                </div> -->
                                             </div>
                                         </div>
                                     </td>
