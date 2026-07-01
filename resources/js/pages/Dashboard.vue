@@ -93,8 +93,6 @@ interface Account {
 const props = defineProps<{
     databases: NotionDatabase[];
     socials: SocialAccount[];
-    posts: Post[];
-    accounts: Account[];
 }>();
 
 defineOptions({
@@ -146,7 +144,7 @@ const greeting = computed<string>(() => {
 const summary = computed<string>(() => {
     const dbs = props.databases.length;
     const accts = props.socials.length;
-    const sched = props.posts.length;
+    const sched = scheduledTotal.value ?? 0;
     const s = (n: number) => (n === 1 ? '' : 's');
     return `You have ${sched} post${s(sched)} scheduled across ${dbs} database${s(dbs)} and ${accts} connected account${s(accts)}.`;
 });
@@ -184,6 +182,19 @@ const submittedTotal = ref<number | null>(null);
 const submittedPage = ref(0);
 const submittedHttp = useHttp({});
 
+// Scheduled posts — lazy-loaded + paginated via /app/posts/scheduled, exactly
+// like the submitted list above.
+const scheduled = ref<{ items: Post[]; accounts: Account[]; lastPage: number }>(
+    {
+        items: [],
+        accounts: [],
+        lastPage: 1,
+    },
+);
+const scheduledTotal = ref<number | null>(null);
+const scheduledPage = ref(0);
+const scheduledHttp = useHttp({});
+
 const tabs = computed(() => [
     {
         key: 'databases' as const,
@@ -201,7 +212,8 @@ const tabs = computed(() => [
         key: 'posts' as const,
         label: 'Scheduled',
         icon: CalendarClock,
-        badge: String(props.posts.length),
+        badge:
+            scheduledTotal.value !== null ? String(scheduledTotal.value) : null,
     },
     {
         key: 'submitted' as const,
@@ -221,8 +233,6 @@ const invalidAccounts = computed(() =>
 );
 const cap = (s: string | null): string =>
     s ? s.charAt(0).toUpperCase() + s.slice(1) : '—';
-const accountName = (id: number | null): string =>
-    props.accounts.find((a) => a.id === id)?.name ?? '—';
 const fmtDate = (s: string | null): string =>
     s ? new Date(s).toLocaleString() : '—';
 const notionUrl = (databaseId: string): string =>
@@ -326,7 +336,7 @@ function deletePost(id: number) {
     postAction.post('/app/post/remove', {
         onSuccess: (res) => {
             toastFromEnvelope(res, 'Post removed from the schedule.');
-            router.reload({ only: ['posts', 'accounts'] });
+            loadScheduled(true);
         },
         onError: () => toast.error('Could not remove the post.'),
     });
@@ -338,9 +348,8 @@ function removeSocial(id: number) {
     socialAction.post('/app/socials/remove', {
         onSuccess: (res) => {
             toastFromEnvelope(res, 'Social account removed.');
-            router.reload({
-                only: ['socials', 'databases', 'posts', 'accounts'],
-            });
+            router.reload({ only: ['socials', 'databases'] });
+            loadScheduled(true);
         },
         onError: () => toast.error('Could not remove the account.'),
     });
@@ -353,7 +362,8 @@ function removeDatabase(id: number) {
     dbAction.post('/app/databases/remove', {
         onSuccess: (res) => {
             toastFromEnvelope(res, 'Database removed.');
-            router.reload({ only: ['databases', 'posts', 'accounts'] });
+            router.reload({ only: ['databases'] });
+            loadScheduled(true);
         },
         onError: () => toast.error('Could not remove the database.'),
     });
@@ -377,6 +387,40 @@ function onDatabaseConnected() {
 
 function onSocialsUpdated() {
     router.reload({ only: ['databases', 'socials'] });
+}
+
+function scheduledAccountName(id: number | null): string {
+    return scheduled.value.accounts.find((a) => a.id === id)?.name ?? '—';
+}
+
+function loadScheduled(reset = false) {
+    const nextPage = reset ? 1 : scheduledPage.value + 1;
+    scheduledHttp.get(`/app/posts/scheduled?page=${nextPage}`, {
+        onSuccess: (res: unknown) => {
+            const env = res as {
+                data?: {
+                    posts: Post[];
+                    accounts: Account[];
+                    currentPage: number;
+                    lastPage: number;
+                    total: number;
+                };
+            };
+            const d = env.data;
+            if (!d) return;
+            if (reset) {
+                scheduled.value.items = d.posts;
+                scheduled.value.accounts = d.accounts;
+            } else {
+                scheduled.value.items.push(...d.posts);
+                scheduled.value.accounts.push(...d.accounts);
+            }
+            scheduledPage.value = d.currentPage;
+            scheduled.value.lastPage = d.lastPage;
+            scheduledTotal.value = d.total;
+        },
+        onError: () => toast.error('Could not load scheduled posts.'),
+    });
 }
 
 function submittedAccountName(id: number | null): string {
@@ -414,11 +458,15 @@ function loadSubmitted(reset = false) {
 }
 
 watch(tab, (t) => {
+    if (t === 'posts' && scheduledTotal.value === null) loadScheduled(true);
     if (t === 'submitted' && submittedTotal.value === null) loadSubmitted(true);
 });
 
 // Pre-warm the submitted total so the Published tab badge shows a number on load.
-onMounted(() => loadSubmitted(true));
+onMounted(() => {
+    loadScheduled(true);
+    loadSubmitted(true);
+});
 
 // Surface the result of an OAuth round-trip (callback redirects here with
 // ?oauth_status / &oauth_platform / &oauth_message), then clean the URL.
@@ -952,7 +1000,20 @@ onMounted(() => {
                                 </tr>
                             </thead>
                             <tbody>
-                                <tr v-if="!posts.length">
+                                <tr
+                                    v-if="
+                                        scheduledHttp.processing &&
+                                        !scheduled.items.length
+                                    "
+                                >
+                                    <td
+                                        colspan="5"
+                                        class="px-5 py-12 text-center text-muted-foreground"
+                                    >
+                                        Loading…
+                                    </td>
+                                </tr>
+                                <tr v-else-if="!scheduled.items.length">
                                     <td
                                         colspan="5"
                                         class="px-5 py-12 text-center text-muted-foreground"
@@ -961,7 +1022,7 @@ onMounted(() => {
                                     </td>
                                 </tr>
                                 <tr
-                                    v-for="p in posts"
+                                    v-for="p in scheduled.items"
                                     :key="p.id"
                                     class="border-t border-border transition-colors hover:bg-muted/30"
                                 >
@@ -999,7 +1060,7 @@ onMounted(() => {
                                         </div>
                                     </td>
                                     <td :class="td">
-                                        {{ accountName(p.account_id) }}
+                                        {{ scheduledAccountName(p.account_id) }}
                                     </td>
                                     <td :class="[td, 'whitespace-nowrap']">
                                         {{ fmtDate(p.scheduled_date) }}
@@ -1034,12 +1095,23 @@ onMounted(() => {
                         </table>
                     </div>
                     <div
-                        v-if="posts.length"
-                        class="border-t border-border px-4 py-3 text-sm text-muted-foreground sm:px-5"
+                        v-if="scheduledTotal !== null"
+                        class="flex items-center justify-between gap-3 border-t border-border px-4 py-3 text-sm text-muted-foreground sm:px-5"
                     >
-                        {{ posts.length }} scheduled post{{
-                            posts.length === 1 ? '' : 's'
-                        }}
+                        <span
+                            >Showing {{ scheduled.items.length }} of
+                            {{ scheduledTotal }}</span
+                        >
+                        <Button
+                            v-if="scheduledPage < scheduled.lastPage"
+                            size="sm"
+                            variant="outline"
+                            :disabled="scheduledHttp.processing"
+                            @click="loadScheduled(false)"
+                        >
+                            <ChevronDown class="h-4 w-4" />
+                            Load more
+                        </Button>
                     </div>
                 </div>
 

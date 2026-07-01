@@ -60,6 +60,7 @@ Route::post('pages/buildScaffolding', [DashboardController::class, 'buildPageSca
 
 // --- Posts ---
 Route::get('posts/all', [DashboardController::class, 'getAllPosts']);
+Route::get('posts/scheduled', [DashboardController::class, 'scheduledPosts']);
 Route::get('posts/submitted', [DashboardController::class, 'submittedPosts']);
 Route::post('post/remove', [DashboardController::class, 'deletePost']);
 Route::post('post/reschedule', [DashboardController::class, 'reschedulePost']);

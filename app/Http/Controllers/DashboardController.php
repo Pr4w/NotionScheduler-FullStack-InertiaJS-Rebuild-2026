@@ -55,27 +55,11 @@ class DashboardController extends Controller
             ->where('is_active', 1)
             ->get();
 
-        // The "Scheduled" tab: upcoming / pending / errored — everything that
-        // is NOT already posted. Submitted posts load lazily + paginated via
-        // submittedPosts() so a heavy posting history doesn't bloat this page.
-        $posts = NotionPosts::with('latestMetrics')
-            ->where('userid', $userId)
-            ->whereNotIn('status', ['deleted', 'posted'])
-            ->where('is_active', 1)
-            ->where('is_valid', 1)
-            ->latest()
-            ->limit(200)
-            ->get();
-
-        $accounts = NotionSocialAccounts::where('userid', $userId)
-            ->whereIn('id', $posts->pluck('account_id')->unique()->filter())
-            ->get();
-
+        // Both post lists load lazily + paginated (scheduledPosts() /
+        // submittedPosts()) so a heavy history never bloats the initial page.
         return Inertia::render('Dashboard', [
             'databases' => $databases,
             'socials' => $socials,
-            'posts' => $posts,
-            'accounts' => $accounts,
         ]);
     }
 
@@ -91,6 +75,36 @@ class DashboardController extends Controller
             ->where('status', 'posted')
             ->where('is_active', 1)
             ->latest('posted_date')
+            ->paginate(20);
+
+        $accounts = NotionSocialAccounts::where('userid', $userId)
+            ->whereIn('id', collect($paginator->items())->pluck('account_id')->unique()->filter())
+            ->get(['id', 'platform', 'name']);
+
+        return Response::default('OK', [
+            'posts' => $paginator->items(),
+            'accounts' => $accounts,
+            'currentPage' => $paginator->currentPage(),
+            'lastPage' => $paginator->lastPage(),
+            'total' => $paginator->total(),
+        ]);
+    }
+
+    /**
+     * Paginated list of scheduled posts (the "Scheduled" tab) — everything not
+     * yet posted. Same shape + pagination as submittedPosts().
+     */
+    public function scheduledPosts(Request $request)
+    {
+        $userId = Auth::id();
+
+        $paginator = NotionPosts::with('latestMetrics')
+            ->where('userid', $userId)
+            ->whereNotIn('status', ['deleted', 'posted', 'error'])
+            ->where('is_active', 1)
+            ->where('is_valid', 1)
+            ->orderBy('scheduled_date', 'desc')
+            ->latest()
             ->paginate(20);
 
         $accounts = NotionSocialAccounts::where('userid', $userId)
