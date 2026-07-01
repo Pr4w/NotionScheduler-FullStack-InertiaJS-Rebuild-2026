@@ -17,6 +17,7 @@ import {
     Share2,
     Sparkles,
     Trash2,
+    TriangleAlert,
 } from '@lucide/vue';
 import AddDatabaseDialog from '@/components/AddDatabaseDialog.vue';
 import ManageDatabaseSocialsDialog from '@/components/ManageDatabaseSocialsDialog.vue';
@@ -213,6 +214,11 @@ const tabs = computed(() => [
 
 const truthy = (v: number | boolean | null | undefined): boolean =>
     v === 1 || v === true;
+
+// Accounts whose token has gone invalid — they won't publish until reconnected.
+const invalidAccounts = computed(() =>
+    props.socials.filter((s) => !truthy(s.is_valid)),
+);
 const cap = (s: string | null): string =>
     s ? s.charAt(0).toUpperCase() + s.slice(1) : '—';
 const accountName = (id: number | null): string =>
@@ -505,6 +511,32 @@ onMounted(() => {
                     </div>
                 </div>
             </header>
+
+            <!-- Invalid-account notice — persistent while any account is invalid -->
+            <div
+                v-if="invalidAccounts.length"
+                class="mb-5 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/50 dark:text-amber-200"
+            >
+                <TriangleAlert
+                    class="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400"
+                />
+                <span class="flex-1">
+                    <strong>{{ invalidAccounts.length }}</strong>
+                    {{
+                        invalidAccounts.length === 1
+                            ? 'account needs'
+                            : 'accounts need'
+                    }}
+                    reconnecting — they won't publish until you do.
+                </span>
+                <button
+                    type="button"
+                    class="shrink-0 rounded-full bg-amber-600 px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-amber-700"
+                    @click="tab = 'socials'"
+                >
+                    Review accounts
+                </button>
+            </div>
 
             <!-- Main card -->
             <div

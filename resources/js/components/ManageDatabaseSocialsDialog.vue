@@ -22,7 +22,11 @@ interface SocialAccount {
     name: string | null;
     profile_picture: string | null;
     database_id: number | null;
+    is_valid: number | boolean;
 }
+
+const truthy = (v: number | boolean | null | undefined): boolean =>
+    v === 1 || v === true;
 
 const props = defineProps<{
     databaseId: number;
@@ -73,13 +77,19 @@ function toggle(id: number) {
     }
 }
 
+// Only valid accounts can be (newly) linked, so select-all works on those.
+const validIds = computed(() =>
+    props.socials.filter((s) => truthy(s.is_valid)).map((s) => s.id),
+);
 const allSelected = computed(
     () =>
-        props.socials.length > 0 &&
-        selected.value.length === props.socials.length,
+        validIds.value.length > 0 &&
+        validIds.value.every((id) => selected.value.includes(id)),
 );
 function toggleAll() {
-    selected.value = allSelected.value ? [] : props.socials.map((s) => s.id);
+    selected.value = allSelected.value
+        ? []
+        : [...new Set([...selected.value, ...validIds.value])];
 }
 
 const save = useHttp<{ database_id: number; social_accounts: number[] }>({
@@ -156,12 +166,20 @@ function doSave() {
                     <label
                         v-for="s in group.accounts"
                         :key="s.id"
-                        class="flex cursor-pointer items-center gap-3 rounded-md p-2 hover:bg-muted/50"
+                        class="flex items-center gap-3 rounded-md p-2"
+                        :class="
+                            !truthy(s.is_valid) && !selected.includes(s.id)
+                                ? 'cursor-not-allowed opacity-60'
+                                : 'cursor-pointer hover:bg-muted/50'
+                        "
                     >
                         <input
                             type="checkbox"
                             :checked="selected.includes(s.id)"
-                            class="accent-primary"
+                            :disabled="
+                                !truthy(s.is_valid) && !selected.includes(s.id)
+                            "
+                            class="accent-primary disabled:cursor-not-allowed"
                             @change="toggle(s.id)"
                         />
                         <div class="relative shrink-0">
@@ -184,9 +202,17 @@ function doSave() {
                                 />
                             </span>
                         </div>
-                        <span class="min-w-0 truncate font-medium">
-                            {{ s.name ?? cap(s.platform) }}
-                        </span>
+                        <div class="flex min-w-0 flex-1 items-center gap-2">
+                            <span class="min-w-0 truncate font-medium">
+                                {{ s.name ?? cap(s.platform) }}
+                            </span>
+                            <span
+                                v-if="!truthy(s.is_valid)"
+                                class="shrink-0 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-medium text-red-700 dark:bg-red-950 dark:text-red-300"
+                            >
+                                Needs reconnect
+                            </span>
+                        </div>
                     </label>
                 </div>
             </div>
