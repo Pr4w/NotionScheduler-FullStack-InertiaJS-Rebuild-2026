@@ -57,7 +57,9 @@ class UsersTable
                 //
             ])
             ->recordActions([
-                Impersonate::make(),
+                Impersonate::make()
+                    ->redirectTo(route('dashboard'))
+                    ->withoutSpa(),
                 // EditAction::make(),
             ])
             ->toolbarActions([
