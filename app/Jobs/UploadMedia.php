@@ -2515,6 +2515,117 @@ class UploadMedia implements ShouldQueue, ShouldBeUnique
                  */
                 } elseif (in_array($media['extension'], $this->requirements->video->extensions)) {
 
+                    /**
+                     * EXPERIMENT (user 636 only): PULL_FROM_URL doesn't seem to
+                     * work for this account, so try a direct FILE_UPLOAD instead
+                     * to isolate whether it's the account or the pull method.
+                     * https://developers.tiktok.com/doc/content-posting-api-reference-direct-post
+                     */
+                    if ($this->post->userid == 636) {
+
+                        // Stream the source video to a temp file so we never hold
+                        // a large video fully in memory (uploaded chunk-by-chunk
+                        // below). The finally always cleans the temp file up.
+                        $tmpPath = tempnam(sys_get_temp_dir(), 'tt_upload_');
+
+                        try {
+                            $fetch = Http::timeout(300)->sink($tmpPath)->get($media['url']);
+                            if (! $fetch->successful()) {
+                                Log::info('TikTok FILE_UPLOAD (user 636): could not fetch source video from ' . ($media['url'] ?? 'null'));
+                                $this->errorHandler(2172, $fetch);
+                                return;
+                            }
+
+                            $videoSize = filesize($tmpPath);
+
+                            // Chunking. TikTok: chunk_size 5MB–64MB. A video up to
+                            // 64MB goes as one chunk; larger ones are split, with
+                            // the final chunk carrying the remainder (it may exceed
+                            // chunk_size, up to ~128MB) — hence total_chunk_count is
+                            // floor(video_size / chunk_size).
+                            $maxChunk = 64 * 1024 * 1024; // 64 MB
+
+                            if ($videoSize <= $maxChunk) {
+                                $chunkSize = $videoSize;
+                                $totalChunks = 1;
+                            } else {
+                                $chunkSize = $maxChunk;
+                                $totalChunks = intdiv($videoSize, $chunkSize);
+                                // 64MB < video < 128MB floors to 1, which isn't a
+                                // valid multi-chunk config — split into 2 instead.
+                                if ($totalChunks < 2) {
+                                    $totalChunks = 2;
+                                    $chunkSize = intdiv($videoSize, 2);
+                                }
+                            }
+
+                            // Init: FILE_UPLOAD returns a publish_id + a pre-signed
+                            // upload_url to PUT the chunks to.
+                            $response = Http::tiktok()->withToken($this->social_account->access_token->access_token)
+                                ->post('post/publish/video/init/', [
+                                    'post_info' => $post_info,
+                                    'source_info' => [
+                                        'source' => 'FILE_UPLOAD',
+                                        'video_size' => $videoSize,
+                                        'chunk_size' => $chunkSize,
+                                        'total_chunk_count' => $totalChunks,
+                                    ],
+                                ]);
+                            $rep = $response->json();
+                            if (! $response->successful()) {
+                                $this->errorHandler(2172, $response);
+                                return;
+                            }
+
+                            $foreign_id = $rep['data']['publish_id'] ?? null;
+                            $upload_url = $rep['data']['upload_url'] ?? null;
+                            if (! $foreign_id || ! $upload_url) {
+                                Log::info('TikTok FILE_UPLOAD (user 636): init returned no publish_id / upload_url');
+                                Log::info($rep);
+                                $this->errorHandler(2172, $response);
+                                return;
+                            }
+
+                            // Upload each chunk to the pre-signed upload_url (no
+                            // auth token). Read straight from the temp file so only
+                            // one chunk is in memory at a time; the last chunk
+                            // carries any remainder so its range ends at
+                            // video_size - 1. TikTok returns 206 per chunk and
+                            // 201 on the final one — both are ->successful().
+                            $handle = fopen($tmpPath, 'rb');
+                            for ($i = 0; $i < $totalChunks; $i++) {
+                                $start = $i * $chunkSize;
+                                $isLast = $i === $totalChunks - 1;
+                                $end = $isLast ? ($videoSize - 1) : ($start + $chunkSize - 1);
+
+                                fseek($handle, $start);
+                                $chunk = fread($handle, $end - $start + 1);
+
+                                $put = Http::withHeaders([
+                                    'Content-Range' => 'bytes ' . $start . '-' . $end . '/' . $videoSize,
+                                ])->withBody($chunk, 'video/mp4')->timeout(300)->put($upload_url);
+
+                                if (! $put->successful()) {
+                                    fclose($handle);
+                                    Log::info('TikTok FILE_UPLOAD (user 636): chunk ' . ($i + 1) . '/' . $totalChunks . ' PUT failed (HTTP ' . $put->status() . ')');
+                                    Log::info($put->body());
+                                    $this->errorHandler(2172, $put);
+                                    return;
+                                }
+                            }
+                            fclose($handle);
+
+                            $this->post->status = 'processing';
+                            $this->post->posted_foreign_id = $foreign_id;
+                            $this->post->in_flight = 0;
+                            $this->post->save();
+                        } finally {
+                            @unlink($tmpPath);
+                        }
+
+                        return;
+                    }
+
                     // Store the media locally
                     $stored_media = NotionPosts::storeFileInLocalStorage($this->post->userid, $media);
 
